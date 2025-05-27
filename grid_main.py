@@ -59,16 +59,22 @@ shutdown_event = asyncio.Event()
 BOT_NAME = None
 BOT_ID = None
 
+
 async def start_telethon():
+   
     # Establish low-level connection
     if not tele_client.is_connected():
         await tele_client.connect()
+        return True
     # If no auth_key yet, import bot authorization once
     # 2) 始终尝试导入 Bot 授权，但捕获 FloodWait
     try:
         await tele_client.start(bot_token=BOT_TOKEN)
     except FloodWaitError as e:
-        print(f"⚠️ 导入 Bot 授权被限流 {e.seconds}s，跳过")
+        is_flood_wait= True
+        print(f"⚠️ 导入 Bot 授权被限流 {e.seconds}s，跳过",flush=True)
+        return False
+        
 
 
 async def download_from_file_id(
@@ -78,7 +84,9 @@ async def download_from_file_id(
     message_id: int
 ):
     # Ensure Telethon logged in
-    await start_telethon()
+    start_result = await start_telethon()
+    if not start_result:
+        return False
     # Fetch message
     msg = await tele_client.get_messages(chat_id, ids=message_id)
     if not msg or not msg.media:
@@ -451,7 +459,20 @@ async def process_one_grid_job():
 
             # 2) 下载视频
             video_path = str(temp_dir / f"{file_unique_id}.mp4")
-            await download_from_file_id(file_id, video_path, chat_id, message_id)
+            download_from_file_result = await download_from_file_id(file_id, video_path, chat_id, message_id)
+            if not download_from_file_result:
+                await db.execute("""
+                    UPDATE grid_jobs
+                    SET job_state='pending',started_at=NOW() 
+                    WHERE id=%s
+                """, (job_id))
+                print(f"❌ 下载视频失败: {file_unique_id} ({file_id})", flush=True)
+                await asyncio.sleep(60)
+                # shutdown_event.set()
+                # return
+                continue
+
+                
         
             # 3) 生成预览图
             preview_basename = str(temp_dir / f"preview_{file_unique_id}")
