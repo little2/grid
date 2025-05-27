@@ -71,7 +71,7 @@ async def start_telethon():
     try:
         await tele_client.start(bot_token=BOT_TOKEN)
     except FloodWaitError as e:
-        is_flood_wait= True
+        
         print(f"⚠️ 导入 Bot 授权被限流 {e.seconds}s，跳过",flush=True)
         return False
         
@@ -491,7 +491,14 @@ async def process_one_grid_job():
                 reply_to_message_id=message_id
             )
 
-        
+            sent2 = await bot.send_photo(
+                chat_id=7519908731,
+                photo=input_file,
+                reply_to_message_id=message_id,
+                caption=f"|_forward_|-1002086579883",
+            )
+
+        # https://t.me/c/2086579883/2608
 
             
             photo_file_id = sent.photo[-1].file_id
