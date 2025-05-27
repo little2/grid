@@ -25,6 +25,7 @@ import subprocess
 
 from telethon import TelegramClient
 from telethon.sessions import StringSession
+from telethon.errors import FloodWaitError
 from telethon.tl.functions.upload import GetFileRequest
 from telethon.tl.types import InputDocumentFileLocation
 
@@ -64,58 +65,37 @@ BOT_NAME = None
 BOT_ID = None
 
 async def start_telethon():
+    # Establish low-level connection
     if not tele_client.is_connected():
-        
-        print("🟡 [start_telethon] 检查连接状态中...", flush=True)
-        if not tele_client.is_connected():
-            print("🟠 [start_telethon] 尚未连接，准备启动...", flush=True)
-
+        await tele_client.connect()
+    # If no auth_key yet, import bot authorization once
+    try:
+        if not getattr(tele_client.session, 'auth_key', None):
             await tele_client.start(bot_token=BOT_TOKEN)
-            print("🟢 [start_telethon] 已连接成功", flush=True)
-        else:
-            print("✅ [start_telethon] 已连接", flush=True)
+    except FloodWaitError as e:
+        print(f"⚠️ 导入 Bot 授权限流 {e.seconds}s，跳过授权")
 
 
-
-
-async def download_from_file_id(file_id, save_path, chat_id, message_id):
-    await start_telethon()
-    msg = await tele_client.get_messages(chat_id, ids=message_id)
-    if not msg:
-        raise RuntimeError("获取消息失败")
-    await download_with_resume(msg, save_path)
-
-
-# 新版 download_from_file_id：接收 chat_id 与 message_id
-async def download_from_file_id2(
+async def download_from_file_id(
     file_id: str,
     save_path: str,
     chat_id: int,
     message_id: int
 ):
-    # 1. 确保 Telethon 已登录
+    # Ensure Telethon logged in
     await start_telethon()
-
-    # 2. 拿到消息
+    # Fetch message
     msg = await tele_client.get_messages(chat_id, ids=message_id)
-    if not msg:
-        raise RuntimeError(f"❌ 无法获取 chat_id={chat_id} message_id={message_id}")
-
-    # 3. 计算本地已下载字节数
+    if not msg or not msg.media:
+        raise RuntimeError(f"❌ 获取消息失败: {chat_id}/{message_id}")
+    # Resume support
     start = os.path.getsize(save_path) if os.path.exists(save_path) else 0
     total = getattr(msg.media, 'size', None) or getattr(msg.document, 'size', None)
-    if start:
-        print(f"⏸️ 续传：已下载 {start} / {total} bytes", flush=True)
-
-    # 4. 打开文件（追加或重写）
     mode = 'ab' if start else 'wb'
     with open(save_path, mode) as f:
-        # 5. 定义简单进度回调
         def prog(cur, tot):
             pct = (start + cur) / total * 100 if total else 0
             print(f"\r📥 下载进度：{start+cur}/{total} bytes ({pct:.1f}%)", end='', flush=True)
-
-        # 6. 从 offset 开始下载
         await tele_client.download_file(
             msg,
             file=f,
@@ -123,10 +103,15 @@ async def download_from_file_id2(
             limit=(total - start) if total else None,
             progress_callback=prog
         )
+    print(f"\n✔️ 下载完成：{save_path}")
 
-    print("\n✔️ 下载完成：", save_path, flush=True)
 
-
+async def download_from_file_id2(file_id, save_path, chat_id, message_id):
+    await start_telethon()
+    msg = await tele_client.get_messages(chat_id, ids=message_id)
+    if not msg:
+        raise RuntimeError("获取消息失败")
+    await download_with_resume(msg, save_path)
 
 async def download_with_resume(msg, save_path, chunk_size: int = 128 * 1024):
     """
@@ -446,7 +431,7 @@ async def process_one_grid_job():
         """)
 
         if not job:
-            print("📭 No pending job found")
+            print("📭 No pending job found",flush=True)
             await asyncio.sleep(60)
             # shutdown_event.set()
             # return
@@ -613,6 +598,7 @@ async def shutdown():
     await bot.session.close()
     # 2) 关闭你的 MySQL 连接池
     await db.close()
+    await tele_client.disconnect()
 
 async def main():
     global BOT_NAME, BOT_ID, API_ID
@@ -622,6 +608,7 @@ async def main():
     print(f"🤖 Logged in as @{BOT_NAME} (BOT_ID={BOT_ID}, API_ID={API_ID})")
 
     await start_telethon()
+    print("✅ Telethon 已连接")
 
     # 并行启动，两者谁先结束，就取消另一个
     task1 = asyncio.create_task(process_one_grid_job())
