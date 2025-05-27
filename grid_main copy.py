@@ -74,49 +74,6 @@ async def download_from_file_id(file_id, save_path, chat_id, message_id):
         raise RuntimeError("获取消息失败")
     await download_with_resume(msg, save_path)
 
-
-# 新版 download_from_file_id：接收 chat_id 与 message_id
-async def download_from_file_id2(
-    file_id: str,
-    save_path: str,
-    chat_id: int,
-    message_id: int
-):
-    # 1. 确保 Telethon 已登录
-    await start_telethon()
-
-    # 2. 拿到消息
-    msg = await tele_client.get_messages(chat_id, ids=message_id)
-    if not msg:
-        raise RuntimeError(f"❌ 无法获取 chat_id={chat_id} message_id={message_id}")
-
-    # 3. 计算本地已下载字节数
-    start = os.path.getsize(save_path) if os.path.exists(save_path) else 0
-    total = getattr(msg.media, 'size', None) or getattr(msg.document, 'size', None)
-    if start:
-        print(f"⏸️ 续传：已下载 {start} / {total} bytes", flush=True)
-
-    # 4. 打开文件（追加或重写）
-    mode = 'ab' if start else 'wb'
-    with open(save_path, mode) as f:
-        # 5. 定义简单进度回调
-        def prog(cur, tot):
-            pct = (start + cur) / total * 100 if total else 0
-            print(f"\r📥 下载进度：{start+cur}/{total} bytes ({pct:.1f}%)", end='', flush=True)
-
-        # 6. 从 offset 开始下载
-        await tele_client.download_file(
-            msg,
-            file=f,
-            offset=start,
-            limit=(total - start) if total else None,
-            progress_callback=prog
-        )
-
-    print("\n✔️ 下载完成：", save_path, flush=True)
-
-
-
 async def download_with_resume(msg, save_path, chunk_size: int = 128 * 1024):
     """
     用 MTProto 分块下载并支持续传。
@@ -425,169 +382,173 @@ async def limited_polling():
     print("🛑 Polling stopped")
 
 async def process_one_grid_job():
-    job = await db.fetchone("""
-        SELECT id, file_id, file_unique_id, source_chat_id, source_message_id
-        FROM grid_jobs
-        WHERE job_state='pending'
-        ORDER BY scheduled_at ASC
-        LIMIT 1
-    """)
+    
+    while not shutdown_event.is_set():
 
-    if not job:
-        print("📭 No pending job found")
-        await asyncio.sleep(30)
-        shutdown_event.set()
-        return
+        job = await db.fetchone("""
+            SELECT id, file_id, file_unique_id, source_chat_id, source_message_id
+            FROM grid_jobs
+            WHERE job_state='pending'
+            ORDER BY scheduled_at ASC
+            LIMIT 1
+        """)
 
-    job_id, file_id, file_unique_id, chat_id, message_id = job
-    print(f"🔧 Processing job ID={job_id}",flush=True)
+        if not job:
+            print("📭 No pending job found")
+            await asyncio.sleep(60)
+            # shutdown_event.set()
+            # return
+            continue
 
-    await db.execute("""
-        UPDATE grid_jobs
-        SET job_state='processing',started_at=NOW() 
-        WHERE id=%s
-    """, (job_id))
-
-
-    try:
-
-        # 1) 准备临时目录
-        temp_dir = Path("temp")
-        temp_dir.mkdir(exist_ok=True)
-
-
-        # 2) 下载视频
-        video_path = str(temp_dir / f"{file_unique_id}.mp4")
-        await download_from_file_id(file_id, video_path, chat_id, message_id)
-       
-        # 3) 生成预览图
-        preview_basename = str(temp_dir / f"preview_{file_unique_id}")
-        preview_path = await make_keyframe_grid(video_path, preview_basename)
-
-
-        # 5) 之后再计算 pHash、上传、更新数据库……
-        phash_str = None
-        with Image.open(preview_path) as img:
-            phash_str = str(imagehash.phash(img))
-
-        input_file = FSInputFile(preview_path)
-        sent = await bot.send_photo(
-            chat_id=chat_id,
-            photo=input_file,
-            reply_to_message_id=message_id
-        )
-
-       
-
-        
-        photo_file_id = sent.photo[-1].file_id
-        photo_unique_id = sent.photo[-1].file_unique_id
-
-        # 更新任务状态
+        job_id, file_id, file_unique_id, chat_id, message_id = job
+        print(f"🔧 Processing job ID={job_id}",flush=True)
 
         await db.execute("""
             UPDATE grid_jobs
-            SET job_state='done',
-                finished_at=NOW(),
-                grid_file_id=%s
+            SET job_state='processing',started_at=NOW() 
             WHERE id=%s
-        """, (photo_file_id, job_id))
+        """, (job_id))
 
-        await db.execute("""
-            INSERT INTO photo (
-                file_unique_id, file_size, width, height, file_name,
-                caption, root_unique_id, create_time, files_drive,
-                hash, same_fuid
+
+        try:
+
+            # 1) 准备临时目录
+            temp_dir = Path("temp")
+            temp_dir.mkdir(exist_ok=True)
+
+
+            # 2) 下载视频
+            video_path = str(temp_dir / f"{file_unique_id}.mp4")
+            await download_from_file_id(file_id, video_path, chat_id, message_id)
+        
+            # 3) 生成预览图
+            preview_basename = str(temp_dir / f"preview_{file_unique_id}")
+            preview_path = await make_keyframe_grid(video_path, preview_basename)
+
+
+            # 5) 之后再计算 pHash、上传、更新数据库……
+            phash_str = None
+            with Image.open(preview_path) as img:
+                phash_str = str(imagehash.phash(img))
+
+            input_file = FSInputFile(preview_path)
+            sent = await bot.send_photo(
+                chat_id=chat_id,
+                photo=input_file,
+                reply_to_message_id=message_id
             )
-            VALUES (%s, %s, %s, %s, NULL, NULL, NULL, NOW(), NULL, %s, NULL)
-            ON DUPLICATE KEY UPDATE
-                file_size=VALUES(file_size),
-                width=VALUES(width),
-                height=VALUES(height),
-                create_time=NOW(),
-                hash=VALUES(hash)         
-        """, (
-            photo_unique_id,
-            sent.photo[-1].file_size,
-            sent.photo[-1].width,
-            sent.photo[-1].height,
-            phash_str
-        ))
 
-        await db.execute("""
-            INSERT INTO file_extension (file_type, file_unique_id, file_id, bot, create_time)
-            VALUES ('photo', %s, %s, %s, NOW())
-            ON DUPLICATE KEY UPDATE
-                file_id=VALUES(file_id),
-                bot=VALUES(bot),
-                create_time=NOW()
-        """, (photo_unique_id, photo_file_id, BOT_NAME))
+        
 
-        await db.execute(
-            """
-            INSERT INTO bid_thumbnail (
-                file_unique_id,
-                thumb_file_unique_id,
-                bot_name,
-                file_id,
-                confirm_status,
-                uploader_id,
-                status,
-                t_update
-            )
-            VALUES (%s, %s, %s, %s, 0, 0, 1, 1)
-            ON DUPLICATE KEY UPDATE
-                file_id          = VALUES(file_id),
-                confirm_status   = VALUES(confirm_status),
-                uploader_id      = VALUES(uploader_id),
-                status           = VALUES(status),
-                t_update         = 1
-            """,
-            (
-                file_unique_id,
+            
+            photo_file_id = sent.photo[-1].file_id
+            photo_unique_id = sent.photo[-1].file_unique_id
+
+            # 更新任务状态
+
+            await db.execute("""
+                UPDATE grid_jobs
+                SET job_state='done',
+                    finished_at=NOW(),
+                    grid_file_id=%s
+                WHERE id=%s
+            """, (photo_file_id, job_id))
+
+            await db.execute("""
+                INSERT INTO photo (
+                    file_unique_id, file_size, width, height, file_name,
+                    caption, root_unique_id, create_time, files_drive,
+                    hash, same_fuid
+                )
+                VALUES (%s, %s, %s, %s, NULL, NULL, NULL, NOW(), NULL, %s, NULL)
+                ON DUPLICATE KEY UPDATE
+                    file_size=VALUES(file_size),
+                    width=VALUES(width),
+                    height=VALUES(height),
+                    create_time=NOW(),
+                    hash=VALUES(hash)         
+            """, (
                 photo_unique_id,
-                BOT_NAME,
-                photo_file_id,       # 这里加上 photo_file_id
+                sent.photo[-1].file_size,
+                sent.photo[-1].width,
+                sent.photo[-1].height,
+                phash_str
+            ))
+
+            await db.execute("""
+                INSERT INTO file_extension (file_type, file_unique_id, file_id, bot, create_time)
+                VALUES ('photo', %s, %s, %s, NOW())
+                ON DUPLICATE KEY UPDATE
+                    file_id=VALUES(file_id),
+                    bot=VALUES(bot),
+                    create_time=NOW()
+            """, (photo_unique_id, photo_file_id, BOT_NAME))
+
+            await db.execute(
+                """
+                INSERT INTO bid_thumbnail (
+                    file_unique_id,
+                    thumb_file_unique_id,
+                    bot_name,
+                    file_id,
+                    confirm_status,
+                    uploader_id,
+                    status,
+                    t_update
+                )
+                VALUES (%s, %s, %s, %s, 0, 0, 1, 1)
+                ON DUPLICATE KEY UPDATE
+                    file_id          = VALUES(file_id),
+                    confirm_status   = VALUES(confirm_status),
+                    uploader_id      = VALUES(uploader_id),
+                    status           = VALUES(status),
+                    t_update         = 1
+                """,
+                (
+                    file_unique_id,
+                    photo_unique_id,
+                    BOT_NAME,
+                    photo_file_id,       # 这里加上 photo_file_id
+                )
             )
-        )
 
 
-        # 4) —— 新增：打包 ZIP —— 
+            # 4) —— 新增：打包 ZIP —— 
 
 
-        # --- 打包 ZIP ---
+            # --- 打包 ZIP ---
 
-        zip_path = str(temp_dir / f"{file_unique_id}.zip")
-        # 把下载的视频和生成的预览图，一次性传给 fast_zip_with_password
-        await asyncio.to_thread(
-            fast_zip_with_password,
-            [video_path, preview_path],
-            zip_path,
-            file_unique_id
-        )
-        print(f"✔️ Created ZIP archive: {zip_path}")
+            zip_path = str(temp_dir / f"{file_unique_id}.zip")
+            # 把下载的视频和生成的预览图，一次性传给 fast_zip_with_password
+            await asyncio.to_thread(
+                fast_zip_with_password,
+                [video_path, preview_path],
+                zip_path,
+                file_unique_id
+            )
+            print(f"✔️ Created ZIP archive: {zip_path}")
 
-        # 5) 上传 ZIP 到指定 chat_id（优先环境变量，否则原 chat），并显示上传进度
-        await start_telethon()
-        sent = await tele_client.send_file(
-            entity=chat_id,
-            file=zip_path,
-            force_document=True,
-            caption=f"🔒 已打包并加密：{file_unique_id}.zip",
-            reply_to=message_id,
-            progress_callback=lambda cur, tot: telethon_upload_progress(cur, tot, zip_path)
-        )
-        # 完成后换行
-       
-        print()
-        print(f"✅ ZIP 已发送到 chat_id={chat_id}")
+            # 5) 上传 ZIP 到指定 chat_id（优先环境变量，否则原 chat），并显示上传进度
+            await start_telethon()
+            sent = await tele_client.send_file(
+                entity=chat_id,
+                file=zip_path,
+                force_document=True,
+                caption=f"🔒 已打包并加密：{file_unique_id}.zip",
+                reply_to=message_id,
+                progress_callback=lambda cur, tot: telethon_upload_progress(cur, tot, zip_path)
+            )
+            # 完成后换行
+        
+            print()
+            print(f"✅ ZIP 已发送到 chat_id={chat_id}")
 
 
-        print(f"✅ Job ID={job_id} completed")
-    except Exception as e:
-        print(f"❌ Job ID={job_id} failed: {e}")
-    finally:
-        shutdown_event.set()
+            print(f"✅ Job ID={job_id} completed")
+        except Exception as e:
+            print(f"❌ Job ID={job_id} failed: {e}")
+        finally:
+            shutdown_event.set()
 
 
 # 进度回调
