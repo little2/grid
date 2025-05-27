@@ -74,7 +74,7 @@ async def start_telethon():
         
 
 
-async def download_from_file_id(
+async def download_from_file_id3(
     file_id: str,
     save_path: str,
     chat_id: int,
@@ -104,13 +104,14 @@ async def download_from_file_id(
         )
     print(f"\n✔️ 下载完成：{save_path}",flush=True)
 
-
-async def download_from_file_id2(file_id, save_path, chat_id, message_id):
+async def download_from_file_id(file_id, save_path, chat_id, message_id):
     await start_telethon()
     msg = await tele_client.get_messages(chat_id, ids=message_id)
-    if not msg:
-        raise RuntimeError("获取消息失败")
+    if not msg or not msg.media:
+        raise RuntimeError(f"❌ 获取消息失败: {chat_id}/{message_id}")
+    # Delegate to your chunked downloader:
     await download_with_resume(msg, save_path)
+    return True
 
 async def download_with_resume(msg, save_path, chunk_size: int = 128 * 1024):
     """
