@@ -443,11 +443,11 @@ async def process_one_grid_job():
         job_id, file_id, file_unique_id, chat_id, message_id = job
         print(f"🔧 Processing job ID={job_id}",flush=True)
 
-        await db.execute("""
-            UPDATE grid_jobs
-            SET job_state='processing',started_at=NOW() 
-            WHERE id=%s
-        """, (job_id))
+        # await db.execute("""
+        #     UPDATE grid_jobs
+        #     SET job_state='processing',started_at=NOW() 
+        #     WHERE id=%s
+        # """, (job_id))
 
 
         try:
