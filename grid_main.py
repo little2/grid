@@ -1,6 +1,3 @@
-
-
-
 import os
 import asyncio
 from dotenv import load_dotenv
@@ -12,8 +9,6 @@ from aiogram.types import Update, Message, FSInputFile
 from aiogram.client.default import DefaultBotProperties
 from grid_db import MySQLManager
 from pathlib import Path
-from datetime import datetime
-from aiohttp import ClientSession
 from moviepy import VideoFileClip
 import json
 from PIL import Image, ImageDraw, ImageFont
@@ -69,11 +64,11 @@ async def start_telethon():
     if not tele_client.is_connected():
         await tele_client.connect()
     # If no auth_key yet, import bot authorization once
+    # 2) 始终尝试导入 Bot 授权，但捕获 FloodWait
     try:
-        if not getattr(tele_client.session, 'auth_key', None):
-            await tele_client.start(bot_token=BOT_TOKEN)
+        await tele_client.start(bot_token=BOT_TOKEN)
     except FloodWaitError as e:
-        print(f"⚠️ 导入 Bot 授权限流 {e.seconds}s，跳过授权")
+        print(f"⚠️ 导入 Bot 授权被限流 {e.seconds}s，跳过")
 
 
 async def download_from_file_id(
