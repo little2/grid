@@ -1,0 +1,23 @@
+# Telegram Bot 框架
+aiogram==3.20.0.post0
+
+# 异步 HTTP 客户端
+aiohttp>=3.8.1
+
+# MySQL 异步连接池
+aiomysql>=0.0.23
+
+# 环境变量读取
+python-dotenv>=0.21.0
+
+# 视频处理
+moviepy>=2.2.1
+
+# 图像处理
+Pillow>=9.5.0
+
+# 感知哈希
+ImageHash>=4.3.1
+
+# 数值运算（ImageHash 的依赖）
+numpy>=1.25.0
