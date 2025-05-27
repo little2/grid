@@ -2,7 +2,7 @@ import os
 import asyncio
 from dotenv import load_dotenv
 from aiogram import Bot
-from aiogram.enums import ContentType, ParseMode
+from aiogram.enums import ParseMode
 from aiogram.methods import GetUpdates
 
 from aiogram.types import Update, Message, FSInputFile
@@ -61,19 +61,16 @@ BOT_ID = None
 
 
 async def start_telethon():
-   
-    # Establish low-level connection
     if not tele_client.is_connected():
         await tele_client.connect()
-        return True
-    # If no auth_key yet, import bot authorization once
-    # 2) 始终尝试导入 Bot 授权，但捕获 FloodWait
     try:
         await tele_client.start(bot_token=BOT_TOKEN)
     except FloodWaitError as e:
-        
-        print(f"⚠️ 导入 Bot 授权被限流 {e.seconds}s，跳过",flush=True)
-        return False
+        print(f"⚠️ 导入 Bot 授权被限流 {e.seconds}s，跳过")
+        await asyncio.sleep(min(e.seconds, 60))
+    except Exception as e:
+        print(f"❌ 导入 Bot 授权失败：{e}")
+
         
 
 
@@ -466,7 +463,13 @@ async def process_one_grid_job():
                     SET job_state='pending',started_at=NOW() 
                     WHERE id=%s
                 """, (job_id))
-                print(f"❌ 下载视频失败: {file_unique_id} ({file_id})", flush=True)
+                print(f"❌ 下载视频失败471: {file_unique_id} ({file_id})", flush=True)
+                # 抛出错误
+               
+
+
+                # 让主循环继续等待下一个任务
+                # 这里可以选择等待一段时间再重试
                 await asyncio.sleep(60)
                 # shutdown_event.set()
                 # return
@@ -605,10 +608,13 @@ async def process_one_grid_job():
 
 
             print(f"✅ Job ID={job_id} completed")
+            shutdown_event.set()
         except Exception as e:
             print(f"❌ Job ID={job_id} failed: {e}")
-        finally:
-            shutdown_event.set()
+            await asyncio.sleep(60)
+            continue
+        
+        
 
 
 # 进度回调
