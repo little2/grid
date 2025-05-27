@@ -424,10 +424,10 @@ async def process_one_grid_job():
         job = await db.fetchone("""
             SELECT id, file_id, file_unique_id, source_chat_id, source_message_id
             FROM grid_jobs
-            WHERE job_state='pending'
+            WHERE job_state='pending' AND bot_name=%s
             ORDER BY scheduled_at ASC
             LIMIT 1
-        """)
+        """, (BOT_NAME,))
 
         if not job:
             print("📭 No pending job found",flush=True)
