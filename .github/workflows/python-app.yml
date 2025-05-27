@@ -1,0 +1,122 @@
+name: Deploy Grid
+
+on: 
+  schedule:
+    - cron: '*/10 * * * *'  # 每10分钟触发一次
+  push: 
+    branches: 
+      - master  # 当推送到 master 分支时触发
+  workflow_dispatch:  # 支持手动触发
+
+jobs:
+  run-telethon-bot:
+    runs-on: ubuntu-latest
+
+    steps:
+    # 步骤 1: Checkout 代码仓库
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    # 步骤 2: 检查正在运行的工作流数量
+    - name: Check for running workflows
+      uses: actions/github-script@v6
+      id: check-running
+      with:
+        script: |
+          const currentRunId = context.runId;  // 获取当前工作流的运行ID
+          const { data } = await github.rest.actions.listWorkflowRuns({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            workflow_id: 'python-app.yml',  // 使用 python-app.yml 作为 workflow_id
+            status: 'in_progress',
+            per_page: 10              // 检查最近10个工作流运行状态
+          });
+          // 过滤掉当前工作流
+          const otherRuns = data.workflow_runs.filter(run => run.id !== currentRunId);
+          core.setOutput('hasOtherRuns', otherRuns.length > 0 ? 'true' : 'false');
+          if (otherRuns.length > 0) {
+            console.log("Another workflow is already running.");
+           
+          } else {
+            console.log("No other running workflows.");
+          }
+      continue-on-error: false  
+
+    - name: Set up Python
+      if: steps.check-running.outputs.hasOtherRuns == 'false'
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      if: steps.check-running.outputs.hasOtherRuns == 'false'
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r grid_requirements.txt
+
+
+       
+
+    - name: Get previous workflow run ID
+      if: steps.check-running.outputs.hasOtherRuns == 'false'
+      uses: actions/github-script@v6
+      id: get-previous-run-id
+      with:
+        script: |
+          const runs = await github.rest.actions.listWorkflowRuns({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            workflow_id: 'python-app.yml',  // 使用 python-app.yml 作为 workflow_id
+            per_page: 1,
+            status: 'success',
+          });
+          if (runs.data.workflow_runs.length > 0) {
+            core.setOutput('run_id', runs.data.workflow_runs[0].id);
+          } else {
+            core.setFailed('No previous successful workflow run found');
+          }
+      continue-on-error: true
+
+    - name: Run Telethon script
+      if: steps.check-running.outputs.hasOtherRuns == 'false'
+      env:
+        CONFIGURATION: ${{ secrets.CONFIGURATION }}
+
+      run: |
+        python grid_main.py
+
+
+    - name: Delete old workflow runs
+      if: steps.check-running.outputs.hasOtherRuns == 'false'
+      uses: actions/github-script@v6
+      with:
+        github-token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}  # 使用个人访问令牌
+        script: |
+          const runs = await github.rest.actions.listWorkflowRuns({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            workflow_id: 'python-app.yml',  // 使用 python-app.yml 作为 workflow_id
+            per_page: 100,  // 获取最多100个运行
+          });
+
+          console.log('Found workflow runs:', runs.data.workflow_runs.length);
+
+          const runIdsToDelete = runs.data.workflow_runs.slice(4).map(run => run.id);
+
+          for (const runId of runIdsToDelete) {
+            await github.rest.actions.deleteWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: runId,
+            });
+            console.log(`Deleted workflow run with ID: ${runId}`);
+          }
+
+    - name: Trigger Next Run
+      if: steps.check-running.outputs.hasOtherRuns == 'false'
+      run: |
+        curl -X POST \
+        -H "Authorization: token ${{ secrets.PERSONAL_ACCESS_TOKEN }}" \
+        -H "Accept: application/vnd.github.v3+json" \
+        https://api.github.com/repos/${{ github.repository }}/actions/workflows/python-app.yml/dispatches \
+        -d '{"ref":"main"}'
