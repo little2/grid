@@ -1,1 +1,5 @@
 .env
+/temp
+/_pycache_
+__pycache__/grid_db.cpython-312.pyc
+__pycache__
