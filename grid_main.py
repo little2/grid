@@ -81,9 +81,8 @@ async def download_from_file_id(
     message_id: int
 ):
     # Ensure Telethon logged in
-    start_result = await start_telethon()
-    if not start_result:
-        return False
+    await start_telethon()
+
     # Fetch message
     msg = await tele_client.get_messages(chat_id, ids=message_id)
     if not msg or not msg.media:
