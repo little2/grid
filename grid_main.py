@@ -16,19 +16,33 @@ import json
 from PIL import Image, ImageDraw, ImageFont
 import imagehash
 
+import shutil
+import subprocess
+
+
+from telethon import TelegramClient
+from telethon.sessions import StringSession
+from telethon.tl.functions.upload import GetFileRequest
+from telethon.tl.types import InputDocumentFileLocation
+
 load_dotenv()
 
 config = {}
 # 嘗試載入 JSON 並合併參數
 try:
-    configuration_json = json.loads(os.getenv('CONFIGURATION', ''))
+    configuration_json = json.loads(os.getenv('CONFIGURATION', '') or '{}')
     if isinstance(configuration_json, dict):
         config.update(configuration_json)  # 將 JSON 鍵值對合併到 config 中
 except Exception as e:
     print(f"⚠️ 無法解析 CONFIGURATION：{e}")
 
 BOT_TOKEN =  config.get('bot_token', os.getenv('BOT_TOKEN'))
+API_ID = int(config.get('api_id', os.getenv('API_ID', 0)))
+API_HASH = config.get('api_hash', os.getenv('API_HASH', ''))
+
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+tele_client = TelegramClient(StringSession(), API_ID, API_HASH)
+
 db = MySQLManager({
     "host": config.get("db_host", os.getenv("MYSQL_DB_HOST", "localhost")),
     "port": int(config.get('db_port', int(os.getenv('MYSQL_DB_PORT', 3306)))),
@@ -44,25 +58,111 @@ DOWNLOAD_DIR = Path("downloads")
 DOWNLOAD_DIR.mkdir(exist_ok=True)
 shutdown_event = asyncio.Event()
 BOT_NAME = None
-API_ID = None
+BOT_ID = None
 
-async def download_from_file_id(file_id: str, save_path: str):
-    file = await bot.get_file(file_id)
-    file_path = file.file_path
-    download_url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_path}"
+async def start_telethon():
+    if not tele_client.is_connected():
+        await tele_client.start(bot_token=BOT_TOKEN)
 
-    async with ClientSession() as session:
-        async with session.get(download_url) as resp:
-            if resp.status == 200:
-                with open(save_path, "wb") as f:
-                    while True:
-                        chunk = await resp.content.read(1024 * 1024)
-                        if not chunk:
-                            break
-                        f.write(chunk)
-            else:
-                raise Exception(f"❌ Download failed: {resp.status}")
-    print(f"✔️ Download completed", flush=True)
+
+
+
+async def download_from_file_id(file_id, save_path, chat_id, message_id):
+    await start_telethon()
+    msg = await tele_client.get_messages(chat_id, ids=message_id)
+    if not msg:
+        raise RuntimeError("获取消息失败")
+    await download_with_resume(msg, save_path)
+
+
+# 新版 download_from_file_id：接收 chat_id 与 message_id
+async def download_from_file_id2(
+    file_id: str,
+    save_path: str,
+    chat_id: int,
+    message_id: int
+):
+    # 1. 确保 Telethon 已登录
+    await start_telethon()
+
+    # 2. 拿到消息
+    msg = await tele_client.get_messages(chat_id, ids=message_id)
+    if not msg:
+        raise RuntimeError(f"❌ 无法获取 chat_id={chat_id} message_id={message_id}")
+
+    # 3. 计算本地已下载字节数
+    start = os.path.getsize(save_path) if os.path.exists(save_path) else 0
+    total = getattr(msg.media, 'size', None) or getattr(msg.document, 'size', None)
+    if start:
+        print(f"⏸️ 续传：已下载 {start} / {total} bytes", flush=True)
+
+    # 4. 打开文件（追加或重写）
+    mode = 'ab' if start else 'wb'
+    with open(save_path, mode) as f:
+        # 5. 定义简单进度回调
+        def prog(cur, tot):
+            pct = (start + cur) / total * 100 if total else 0
+            print(f"\r📥 下载进度：{start+cur}/{total} bytes ({pct:.1f}%)", end='', flush=True)
+
+        # 6. 从 offset 开始下载
+        await tele_client.download_file(
+            msg,
+            file=f,
+            offset=start,
+            limit=(total - start) if total else None,
+            progress_callback=prog
+        )
+
+    print("\n✔️ 下载完成：", save_path, flush=True)
+
+
+
+async def download_with_resume(msg, save_path, chunk_size: int = 128 * 1024):
+    """
+    用 MTProto 分块下载并支持续传。
+    chunk_size 必须满足：
+      - 可被 4096 整除
+      - 1048576 (1 MiB) 可被 chunk_size 整除
+    128 KiB = 131072 bytes 符合要求（1 MiB / 128 KiB = 8）。
+    """
+    doc = msg.media.document
+    total = doc.size
+
+    # 构造文件位置
+    location = InputDocumentFileLocation(
+        id=doc.id,
+        access_hash=doc.access_hash,
+        file_reference=doc.file_reference,
+        thumb_size=b""      # 原始文件
+    )
+
+    # 计算已下载字节
+    start = os.path.getsize(save_path) if os.path.exists(save_path) else 0
+    mode = 'ab' if start else 'wb'
+    print(f"⏯️ 从 {start}/{total} 处续传…", flush=True)
+
+    with open(save_path, mode) as f:
+        offset = start
+        while offset < total:
+            # 始终使用固定 chunk_size
+            resp = await tele_client(GetFileRequest(
+                location=location,
+                offset=offset,
+                limit=chunk_size
+            ))
+            data = resp.bytes
+            if not data:
+                break  # 没数据就结束
+            f.write(data)
+            offset += len(data)
+
+            # 打印进度
+            pct = offset / total * 100
+            print(f"\r📥 {offset}/{total} bytes ({pct:.1f}%)", end="", flush=True)
+
+    print(f"\n✔️ 下载完成: {save_path}", flush=True)
+
+
 
 async def make_keyframe_grid(
     video_path: str,
@@ -70,6 +170,7 @@ async def make_keyframe_grid(
     rows: int = 3,
     cols: int = 3
 ) -> str:
+    print(f"👉 Generated keyframe grid starting", flush=True)
     # 1. 抽帧并拼成网格
     clip = VideoFileClip(video_path)
     n = rows * cols
@@ -116,9 +217,27 @@ async def make_keyframe_grid(
     print(f"✔️ Generated keyframe grid with watermark: {output_path}", flush=True)
     return output_path
 
-async def bypass(file_id: str, from_bot: str, to_bot: str):
-    print(f"👉 Bypassing: {file_id} from {from_bot} to {to_bot}", flush=True)
-    pass
+
+def fast_zip_with_password(file_paths: list[str], dest_zip: str, password: str):
+    """
+    使用系统自带的 zip 工具，以“存储”模式（-0）打包不压缩并设置密码。
+    - file_paths: 要打包的文件全路径列表
+    - dest_zip: 输出的 zip 路径
+    - password: zip 密码
+    """
+    # 1. 如果已存在同名 zip，则先删掉
+    try:
+        os.remove(dest_zip)
+    except FileNotFoundError:
+        pass
+
+    # 2. 确认系统里有 zip 命令
+    if not shutil.which("zip"):
+        raise RuntimeError("未找到系统 zip 命令，请安装 zip 或在 PATH 中可用。")
+
+    # 3. 构造命令：-0 存储模式（不压缩）、-P 明文密码
+    cmd = ["zip", "-0", "-P", password, dest_zip] + file_paths
+    subprocess.run(cmd, check=True)
 
 async def handle_video(message: Message):
     print("handle_video", flush=True)
@@ -331,29 +450,36 @@ async def process_one_grid_job():
 
 
     try:
-        video_path = f"temp/{file_unique_id}.mp4"
-        preview_basename = f"temp/preview_{file_unique_id}"
-        os.makedirs("temp", exist_ok=True)
 
-        await download_from_file_id(file_id, video_path)
+        # 1) 准备临时目录
+        temp_dir = Path("temp")
+        temp_dir.mkdir(exist_ok=True)
+
+
+        # 2) 下载视频
+        video_path = str(temp_dir / f"{file_unique_id}.mp4")
+        await download_from_file_id(file_id, video_path, chat_id, message_id)
+       
+        # 3) 生成预览图
+        preview_basename = str(temp_dir / f"preview_{file_unique_id}")
         preview_path = await make_keyframe_grid(video_path, preview_basename)
 
 
-        # 然后再计算 pHash
-
+        # 5) 之后再计算 pHash、上传、更新数据库……
         phash_str = None
         with Image.open(preview_path) as img:
             phash_str = str(imagehash.phash(img))
-            
 
-
-        # 使用 FSInputFile 上传文件
         input_file = FSInputFile(preview_path)
         sent = await bot.send_photo(
             chat_id=chat_id,
             photo=input_file,
             reply_to_message_id=message_id
         )
+
+       
+
+        
         photo_file_id = sent.photo[-1].file_id
         photo_unique_id = sent.photo[-1].file_unique_id
 
@@ -426,11 +552,48 @@ async def process_one_grid_job():
         )
 
 
+        # 4) —— 新增：打包 ZIP —— 
+
+
+        # --- 打包 ZIP ---
+
+        zip_path = str(temp_dir / f"{file_unique_id}.zip")
+        # 把下载的视频和生成的预览图，一次性传给 fast_zip_with_password
+        await asyncio.to_thread(
+            fast_zip_with_password,
+            [video_path, preview_path],
+            zip_path,
+            file_unique_id
+        )
+        print(f"✔️ Created ZIP archive: {zip_path}")
+
+        # 5) 上传 ZIP 到指定 chat_id（优先环境变量，否则原 chat），并显示上传进度
+        await start_telethon()
+        sent = await tele_client.send_file(
+            entity=chat_id,
+            file=zip_path,
+            force_document=True,
+            caption=f"🔒 已打包并加密：{file_unique_id}.zip",
+            reply_to=message_id,
+            progress_callback=lambda cur, tot: telethon_upload_progress(cur, tot, zip_path)
+        )
+        # 完成后换行
+       
+        print()
+        print(f"✅ ZIP 已发送到 chat_id={chat_id}")
+
+
         print(f"✅ Job ID={job_id} completed")
     except Exception as e:
         print(f"❌ Job ID={job_id} failed: {e}")
     finally:
         shutdown_event.set()
+
+
+# 进度回调
+def telethon_upload_progress(current: int, total: int, zip_path: str):
+    pct = (current / total * 100) if total else 0
+    print(f"\r📤 上传 {zip_path}: {current}/{total} bytes ({pct:.1f}%)", end="", flush=True)
 
 async def shutdown():
     # 1) 关闭 aiogram 内部的 HTTP session
@@ -439,11 +602,11 @@ async def shutdown():
     await db.close()
 
 async def main():
-    global BOT_NAME, API_ID
+    global BOT_NAME, BOT_ID, API_ID
     me = await bot.get_me()
     BOT_NAME = me.username
-    API_ID = me.id
-    print(f"🤖 Logged in as @{BOT_NAME} (API_ID={API_ID})")
+    BOT_ID = me.id
+    print(f"🤖 Logged in as @{BOT_NAME} (BOT_ID={BOT_ID}, API_ID={API_ID})")
 
     # 并行启动，两者谁先结束，就取消另一个
     task1 = asyncio.create_task(process_one_grid_job())
