@@ -12,22 +12,33 @@ from pathlib import Path
 from datetime import datetime
 from aiohttp import ClientSession
 from moviepy import VideoFileClip
-from PIL import Image
+import json
+from PIL import Image, ImageDraw, ImageFont
+import imagehash
 
 load_dotenv()
-BOT_TOKEN = os.getenv("BOT_TOKEN")
 
+config = {}
+# 嘗試載入 JSON 並合併參數
+try:
+    configuration_json = json.loads(os.getenv('CONFIGURATION', ''))
+    if isinstance(configuration_json, dict):
+        config.update(configuration_json)  # 將 JSON 鍵值對合併到 config 中
+except Exception as e:
+    print(f"⚠️ 無法解析 CONFIGURATION：{e}")
 
-
+BOT_TOKEN =  config.get('bot_token', os.getenv('BOT_TOKEN'))
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 db = MySQLManager({
-    "host": os.getenv("MYSQL_DB_HOST"),
-    "port": int(os.getenv("MYSQL_DB_PORT", 3306)),
-    "user": os.getenv("MYSQL_DB_USER"),
-    "password": os.getenv("MYSQL_DB_PASSWORD"),
-    "db": os.getenv("MYSQL_DB_NAME"),
+    "host": config.get("db_host", os.getenv("MYSQL_DB_HOST", "localhost")),
+    "port": int(config.get('db_port', int(os.getenv('MYSQL_DB_PORT', 3306)))),
+    "user": config.get('db_user', os.getenv('MYSQL_DB_USER')),
+    "password": config.get('db_password', os.getenv('MYSQL_DB_PASSWORD')),
+    "db": config.get('db_name', os.getenv('MYSQL_DB_NAME')),
     "autocommit": True
 })
+
+
 
 DOWNLOAD_DIR = Path("downloads")
 DOWNLOAD_DIR.mkdir(exist_ok=True)
@@ -53,7 +64,13 @@ async def download_from_file_id(file_id: str, save_path: str):
                 raise Exception(f"❌ Download failed: {resp.status}")
     print(f"✔️ Download completed", flush=True)
 
-async def make_keyframe_grid(video_path: str, preview_basename: str, rows: int = 3, cols: int = 3) -> str:
+async def make_keyframe_grid(
+    video_path: str,
+    preview_basename: str,
+    rows: int = 3,
+    cols: int = 3
+) -> str:
+    # 1. 抽帧并拼成网格
     clip = VideoFileClip(video_path)
     n = rows * cols
     times = [(i + 1) * clip.duration / (n + 1) for i in range(n)]
@@ -66,9 +83,37 @@ async def make_keyframe_grid(video_path: str, preview_basename: str, rows: int =
         y = (idx // cols) * h
         grid_img.paste(img, (x, y))
 
+    # 2. 添加文字浮水印
+    draw = ImageDraw.Draw(grid_img)
+    # 确保 Roboto_Condensed-Regular.ttf 在你的项目 fonts/ 目录下
+    font_path = "fonts/Roboto_Condensed-Regular.ttf"
+    font_size = int(h * 0.05)
+    font = ImageFont.truetype(font_path, size=font_size)
+    # text = 移置 preview_basename 中的 temp/preview_ 前缀
+    text = Path(preview_basename).name  # 获取文件名
+    if text.startswith("preview_"):
+        text = text[len("preview_"):]
+    
+    # 兼容不同 Pillow 版本计算尺寸
+    try:
+        text_width, text_height = font.getsize(text)
+    except AttributeError:
+        # Pillow >= 8.0 推荐用 textbbox
+        bbox = draw.textbbox((0, 0), text, font=font)
+        text_width = bbox[2] - bbox[0]
+        text_height = bbox[3] - bbox[1]
+
+    # 放在右下角，留 10px 边距
+    x = grid_img.width - text_width - 10
+    y = grid_img.height - text_height - 10
+
+    # 半透明白字
+    draw.text((x, y), text, fill=(255, 255, 255, 128), font=font)
+
+    # 3. 保存并返回路径
     output_path = f"{preview_basename}.jpg"
     grid_img.save(output_path)
-    print(f"✔️ Generated keyframe grid: {output_path}", flush=True)
+    print(f"✔️ Generated keyframe grid with watermark: {output_path}", flush=True)
     return output_path
 
 async def bypass(file_id: str, from_bot: str, to_bot: str):
@@ -155,6 +200,60 @@ async def handle_video(message: Message):
 
     await message.answer("🌀 已加入關鍵幀任務排程")
 
+
+async def handle_document(message: Message):
+    """处理收到的 document：入库 document 表和 file_extension 表"""
+    doc = message.document
+    try:
+        # 1. 写入或更新 document 表
+        await db.execute("""
+            INSERT INTO document (
+                file_unique_id,
+                file_size,
+                file_name,
+                mime_type,
+                caption,
+                create_time
+            )
+            VALUES (%s, %s, %s, %s, %s, NOW())
+            ON DUPLICATE KEY UPDATE
+                file_size = VALUES(file_size),
+                file_name = VALUES(file_name),
+                mime_type = VALUES(mime_type),
+                caption = VALUES(caption),
+                create_time = NOW()
+        """, (
+            doc.file_unique_id,
+            doc.file_size,
+            doc.file_name,
+            doc.mime_type,
+            message.caption or None
+        ))
+
+        # 2. 写入或更新 file_extension 表
+        await db.execute("""
+            INSERT INTO file_extension (
+                file_type,
+                file_unique_id,
+                file_id,
+                bot,
+                create_time
+            )
+            VALUES ('document', %s, %s, %s, NOW())
+            ON DUPLICATE KEY UPDATE
+                file_id      = VALUES(file_id),
+                bot          = VALUES(bot),
+                create_time  = NOW()
+        """, (
+            doc.file_unique_id,
+            doc.file_id,
+            BOT_NAME
+        ))
+
+        await message.reply("✅ 文档已入库")
+    except Exception as e:
+        print(f"[Error] handle_document: {e}")
+
 async def get_last_update_id() -> int:
     await db.init()
     row = await db.fetchone("SELECT message_id FROM scrap_progress WHERE api_id=%s AND chat_id=0", (API_ID,))
@@ -194,6 +293,10 @@ async def limited_polling():
                 except Exception as e:
                     print(f"[Error] handle_video: {e}")
 
+            # 改为调用封装好的 handle_document
+            elif update.message and update.message.document:
+                await handle_document(update.message)
+
         if max_update_id != last_update_id:
             await update_scrap_progress(max_update_id)
             last_update_id = max_update_id
@@ -220,6 +323,13 @@ async def process_one_grid_job():
     job_id, file_id, file_unique_id, chat_id, message_id = job
     print(f"🔧 Processing job ID={job_id}",flush=True)
 
+    await db.execute("""
+        UPDATE grid_jobs
+        SET job_state='processing',started_at=NOW() 
+        WHERE id=%s
+    """, (job_id))
+
+
     try:
         video_path = f"temp/{file_unique_id}.mp4"
         preview_basename = f"temp/preview_{file_unique_id}"
@@ -227,6 +337,15 @@ async def process_one_grid_job():
 
         await download_from_file_id(file_id, video_path)
         preview_path = await make_keyframe_grid(video_path, preview_basename)
+
+
+        # 然后再计算 pHash
+
+        phash_str = None
+        with Image.open(preview_path) as img:
+            phash_str = str(imagehash.phash(img))
+            
+
 
         # 使用 FSInputFile 上传文件
         input_file = FSInputFile(preview_path)
@@ -254,17 +373,19 @@ async def process_one_grid_job():
                 caption, root_unique_id, create_time, files_drive,
                 hash, same_fuid
             )
-            VALUES (%s, %s, %s, %s, NULL, NULL, NULL, NOW(), NULL, NULL, NULL)
+            VALUES (%s, %s, %s, %s, NULL, NULL, NULL, NOW(), NULL, %s, NULL)
             ON DUPLICATE KEY UPDATE
                 file_size=VALUES(file_size),
                 width=VALUES(width),
                 height=VALUES(height),
-                create_time=NOW()
+                create_time=NOW(),
+                hash=VALUES(hash)         
         """, (
             photo_unique_id,
             sent.photo[-1].file_size,
             sent.photo[-1].width,
-            sent.photo[-1].height
+            sent.photo[-1].height,
+            phash_str
         ))
 
         await db.execute("""
