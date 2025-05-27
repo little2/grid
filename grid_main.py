@@ -66,10 +66,10 @@ async def start_telethon():
     try:
         await tele_client.start(bot_token=BOT_TOKEN)
     except FloodWaitError as e:
-        print(f"⚠️ 导入 Bot 授权被限流 {e.seconds}s，跳过")
+        print(f"⚠️ 导入 Bot 授权被限流 {e.seconds}s，跳过",flush=True)
         await asyncio.sleep(min(e.seconds, 60))
     except Exception as e:
-        print(f"❌ 导入 Bot 授权失败：{e}")
+        print(f"❌ 导入 Bot 授权失败：{e}",flush=True)
 
         
 
@@ -102,7 +102,7 @@ async def download_from_file_id(
             limit=(total - start) if total else None,
             progress_callback=prog
         )
-    print(f"\n✔️ 下载完成：{save_path}")
+    print(f"\n✔️ 下载完成：{save_path}",flush=True)
 
 
 async def download_from_file_id2(file_id, save_path, chat_id, message_id):
@@ -266,7 +266,7 @@ async def handle_video(message: Message):
     """, (file_unique_id,))
     if thumb_row and thumb_row[0]:
         thumb_file_unique_id = thumb_row[0]
-        print("check bid_thumbnail file_extension")
+        print("check bid_thumbnail file_extension",flush=True)
         rows = await db.fetchall("""
             SELECT file_id, bot FROM file_extension WHERE file_unique_id=%s
         """, (thumb_file_unique_id,))
@@ -366,7 +366,7 @@ async def handle_document(message: Message):
 
         await message.reply("✅ 文档已入库")
     except Exception as e:
-        print(f"[Error] handle_document: {e}")
+        print(f"[Error] handle_document: {e}",flush=True)
 
 async def get_last_update_id() -> int:
     await db.init()
@@ -384,7 +384,7 @@ async def update_scrap_progress(new_update_id: int):
 
 async def limited_polling():
     last_update_id = await get_last_update_id()
-    print(f"📥 Polling from offset={last_update_id + 1}")
+    print(f"📥 Polling from offset={last_update_id + 1}",flush=True)
 
     while not shutdown_event.is_set():
         updates: list[Update] = await bot(GetUpdates(
@@ -417,7 +417,7 @@ async def limited_polling():
 
         await asyncio.sleep(1)
 
-    print("🛑 Polling stopped")
+    print("🛑 Polling stopped",flush=True)
 
 async def process_one_grid_job():
     while not shutdown_event.is_set():
