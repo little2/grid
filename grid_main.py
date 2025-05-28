@@ -506,6 +506,14 @@ async def process_one_grid_job():
             photo=input_file,
             reply_to_message_id=message_id
         )
+
+        # 9)  备份:
+        sent2 = await bot.send_photo(
+            chat_id=7519908731,
+            photo=input_file,
+            caption=f"|_forward_|-1002086579883",
+        )
+
     except Exception as e:
         print(f"❌ 上传预览图失败: {e}", flush=True)
         await db.execute("""
@@ -621,13 +629,7 @@ async def process_one_grid_job():
     print()
     print(f"✅ ZIP 已发送到 chat_id={chat_id}",flush=True)
 
-    # 9)  备份:
-    sent2 = await bot.send_photo(
-        chat_id=7519908731,
-        photo=input_file,
-        reply_to_message_id=message_id,
-        caption=f"|_forward_|-1002086579883",
-    )
+
 
 
     print(f"✅ Job ID={job_id} completed",flush=True)
@@ -658,7 +660,7 @@ async def main():
     print(f"🤖 Logged in as @{BOT_NAME} (BOT_ID={BOT_ID}, API_ID={API_ID})")
 
     await start_telethon()
-    print("✅ Telethon 已连接")
+    
 
     # 并行启动，两者谁先结束，就取消另一个
     task1 = asyncio.create_task(process_one_grid_job())
