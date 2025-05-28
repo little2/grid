@@ -623,8 +623,9 @@ async def process_one_grid_job():
 
     # 8)  备份:上传 ZIP 到指定 chat_id（优先环境变量，否则原 chat），并显示上传进度
     await start_telethon()
+    peer = await tele_client.get_entity(TELEGROUP_ARCHIVE)
     sent = await tele_client.send_file(
-        entity=f"{TELEGROUP_ARCHIVE}",
+        entity=peer,
         file=zip_path,
         force_document=True,
         caption=f"🔒 已打包并加密：{file_unique_id}.zip",
