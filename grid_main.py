@@ -292,7 +292,8 @@ async def handle_video(message: Message):
                     await message.answer_photo(file_id_result, caption="✅ 縮圖已存在")
                     return
                 else:
-                    await bypass(file_id_result, bot_name, BOT_NAME)
+                    pass
+                    # await bypass(file_id_result, bot_name, BOT_NAME)
                     return
         else:
             print("No existing thumbnail found, will create a new one")
@@ -446,7 +447,7 @@ async def process_one_grid_job():
 
     if not job:
         print("📭 No pending job found")
-        await asyncio.sleep(30)
+        await asyncio.sleep(60)
         shutdown_event.set()
         return
 
@@ -476,7 +477,7 @@ async def process_one_grid_job():
         preview_path = await make_keyframe_grid(video_path, preview_basename)
 
 
-        # 5) 之后再计算 pHash、上传、更新数据库……
+        # 49) 之后再计算 pHash、上传、更新数据库……
         phash_str = None
         with Image.open(preview_path) as img:
             phash_str = str(imagehash.phash(img))
