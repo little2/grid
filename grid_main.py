@@ -236,13 +236,13 @@ def fast_zip_with_password(file_paths: list[str], dest_zip: str, password: str):
     subprocess.run(cmd, check=True)
 
 async def handle_video(message: Message):
-    print("handle_video", flush=True)
+    print("Starting to handle video", flush=True)
     video = message.video
     file_unique_id = video.file_unique_id
     file_id = video.file_id
     await db.init()
 
-    print("check video", flush=True)
+    print("- create/update video, file_extension", flush=True)
     await db.execute("""
         INSERT INTO video (file_unique_id, file_size, duration, width, height, mime_type, create_time, update_time)
         VALUES (%s, %s, %s, %s, %s, %s, NOW(), NOW())
@@ -255,37 +255,40 @@ async def handle_video(message: Message):
             update_time=NOW()
     """, (file_unique_id, video.file_size, video.duration, video.width, video.height, video.mime_type))
 
-    print("check file_extension", flush=True)
+    
     await db.execute("""
         INSERT IGNORE INTO file_extension (file_type, file_unique_id, file_id, bot, create_time)
         VALUES ('video', %s, %s, %s, NOW())
     """, (file_unique_id, file_id, BOT_NAME))
 
-    print("check bid_thumbnail", flush=True)
+    print("- create/update bid_thumbnail", flush=True)
     thumb_row = await db.fetchone("""
         SELECT thumb_file_unique_id FROM bid_thumbnail WHERE file_unique_id=%s
     """, (file_unique_id,))
     if thumb_row and thumb_row[0]:
         thumb_file_unique_id = thumb_row[0]
-        print("check bid_thumbnail file_extension",flush=True)
+
+        
+
         rows = await db.fetchall("""
             SELECT file_id, bot FROM file_extension WHERE file_unique_id=%s
         """, (thumb_file_unique_id,))
         if rows:
             for file_id_result, bot_name in rows:
                 if bot_name == BOT_NAME:
+                    print("-- ✅ 縮圖已存在",flush=True)
                     await message.answer_photo(file_id_result, caption="✅ 縮圖已存在")
                     return
                 else:
-                    pass
+                    print("-- ✅ 縮圖已存在,但是在别的BOT,不用生成",flush=True)
                     # await bypass(file_id_result, bot_name, BOT_NAME)
                     return
         else:
-            print("No existing thumbnail found, will create a new one")
+            print("-- No existing thumbnail found, will create a new one")
             pass
             #await db.execute("DELETE FROM bid_thumbnail WHERE thumb_file_unique_id=%s", (thumb_file_unique_id,))
     else:
-        print("check grid_jobs", flush=True)
+        print("- Create grid_jobs", flush=True)
         # 在 handle_video 或者你插入 grid_jobs 的地方，把 message.chat.id、message.message_id 也传进去
         await db.execute("""
             INSERT INTO grid_jobs (
