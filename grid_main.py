@@ -38,6 +38,10 @@ except Exception as e:
 BOT_TOKEN =  config.get('bot_token', os.getenv('BOT_TOKEN'))
 API_ID = int(config.get('api_id', os.getenv('API_ID', 0)))
 API_HASH = config.get('api_hash', os.getenv('API_HASH', ''))
+TELEGROUP_THUMB = int(config.get('telegroup_thumb', os.getenv('TELEGROUP_THUMB', 0)))
+TELEGROUP_ARCHIVE = int(config.get('telegroup_archive', os.getenv('TELEGROUP_ARCHIVE', 0)))
+
+
 
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 tele_client = TelegramClient(StringSession(), API_ID, API_HASH)
@@ -511,8 +515,11 @@ async def process_one_grid_job():
         sent2 = await bot.send_photo(
             chat_id=7519908731,
             photo=input_file,
-            caption=f"|_forward_|-1002086579883",
+            caption=f"|_forward_|-100{TELEGROUP_THUMB}",
         )
+
+
+
 
     except Exception as e:
         print(f"❌ 上传预览图失败: {e}", flush=True)
@@ -617,7 +624,7 @@ async def process_one_grid_job():
     # 8)  备份:上传 ZIP 到指定 chat_id（优先环境变量，否则原 chat），并显示上传进度
     await start_telethon()
     sent = await tele_client.send_file(
-        entity=chat_id,
+        entity=f"-100{TELEGROUP_ARCHIVE}",
         file=zip_path,
         force_document=True,
         caption=f"🔒 已打包并加密：{file_unique_id}.zip",
@@ -625,6 +632,8 @@ async def process_one_grid_job():
         progress_callback=lambda cur, tot: telethon_upload_progress(cur, tot, zip_path)
     )
     # 完成后换行
+
+
 
     print()
     print(f"✅ ZIP 已发送到 chat_id={chat_id}",flush=True)
