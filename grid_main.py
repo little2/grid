@@ -313,7 +313,7 @@ async def handle_video(message: Message):
             message.message_id
         ))
 
-    await message.answer("🌀 已加入關鍵幀任務排程")
+    await message.answer("🌀 已加入關鍵幀任務排程",reply_to_message_id=message.message_id)
 
 
 async def handle_document(message: Message):
@@ -494,12 +494,6 @@ async def process_one_grid_job():
                 reply_to_message_id=message_id
             )
 
-            sent2 = await bot.send_photo(
-                chat_id=7519908731,
-                photo=input_file,
-                reply_to_message_id=message_id,
-                caption=f"|_forward_|-1002086579883",
-            )
 
         # https://t.me/c/2086579883/2608
 
@@ -605,6 +599,14 @@ async def process_one_grid_job():
         
             print()
             print(f"✅ ZIP 已发送到 chat_id={chat_id}")
+
+
+            sent2 = await bot.send_photo(
+                chat_id=7519908731,
+                photo=input_file,
+                reply_to_message_id=message_id,
+                caption=f"|_forward_|-1002086579883",
+            )
 
 
             print(f"✅ Job ID={job_id} completed")
