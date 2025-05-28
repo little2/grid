@@ -112,11 +112,3 @@ jobs:
             console.log(`Deleted workflow run with ID: ${runId}`);
           }
 
-    - name: Trigger Next Run
-      if: steps.check-running.outputs.hasOtherRuns == 'false'
-      run: |
-        curl -X POST \
-        -H "Authorization: token ${{ secrets.PERSONAL_ACCESS_TOKEN }}" \
-        -H "Accept: application/vnd.github.v3+json" \
-        https://api.github.com/repos/${{ github.repository }}/actions/workflows/python-app.yml/dispatches \
-        -d '{"ref":"main"}'
