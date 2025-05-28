@@ -598,7 +598,7 @@ async def process_one_grid_job():
             # 完成后换行
         
             print()
-            print(f"✅ ZIP 已发送到 chat_id={chat_id}")
+            print(f"✅ ZIP 已发送到 chat_id={chat_id}",flush=True)
 
 
             sent2 = await bot.send_photo(
@@ -609,7 +609,7 @@ async def process_one_grid_job():
             )
 
 
-            print(f"✅ Job ID={job_id} completed")
+            print(f"✅ Job ID={job_id} completed",flush=True)
             shutdown_event.set()
         except Exception as e:
             print(f"❌ Job ID={job_id} failed: {e}")
