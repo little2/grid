@@ -40,7 +40,7 @@ BOT_TOKEN =  config.get('bot_token', os.getenv('BOT_TOKEN'))
 API_ID = int(config.get('api_id', os.getenv('API_ID', 0)))
 API_HASH = config.get('api_hash', os.getenv('API_HASH', ''))
 TELEGROUP_THUMB = int(config.get('telegroup_thumb', os.getenv('TELEGROUP_THUMB', 0)))
-TELEGROUP_ARCHIVE = int(config.get('telegroup_archive', os.getenv('TELEGROUP_ARCHIVE', 0)))
+TELEGROUP_ARCHIVE = config.get('telegroup_archive', os.getenv('TELEGROUP_ARCHIVE'))
 
 
 
@@ -418,6 +418,22 @@ async def update_scrap_progress(new_update_id: int):
             update_datetime=NOW()
     """, (API_ID, new_update_id))
 
+
+
+
+async def get_tele_peer(target: str):
+    """
+    统一处理 channel/group/user 的 entity 获取
+    - 会自动补全 -100 前缀
+    - 会自动处理 username（@xxx）或 ID
+    """
+    if target.isdigit() and not target.startswith("-100"):
+        target = f"-100{target}"
+    try:
+        return await tele_client.get_entity(target)
+    except Exception as e:
+        raise RuntimeError(f"❌ 无法取得目标 chat 对象（{target}）：{e}")
+
 async def limited_polling():
     last_update_id = await get_last_update_id()
     print(f"📥 Polling from offset={last_update_id + 1}",flush=True)
@@ -650,7 +666,8 @@ async def process_one_grid_job():
 
     # 8)  备份:上传 ZIP 到指定 chat_id（优先环境变量，否则原 chat），并显示上传进度
     await start_telethon()
-    peer = await tele_client.get_entity(TELEGROUP_ARCHIVE)
+    peer = await get_tele_peer(TELEGROUP_ARCHIVE)
+   
     sent = await tele_client.send_file(
         entity=peer,
         file=zip_path,
