@@ -40,8 +40,7 @@ BOT_TOKEN =  config.get('bot_token', os.getenv('BOT_TOKEN'))
 API_ID = int(config.get('api_id', os.getenv('API_ID', 0)))
 API_HASH = config.get('api_hash', os.getenv('API_HASH', ''))
 TELEGROUP_THUMB = int(config.get('telegroup_thumb', os.getenv('TELEGROUP_THUMB', 0)))
-TELEGROUP_ARCHIVE = config.get('telegroup_archive', os.getenv('TELEGROUP_ARCHIVE'))
-
+TELEGROUP_ARCHIVE = int(config.get('telegroup_archive', os.getenv('TELEGROUP_ARCHIVE', 0)))
 
 
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
@@ -421,18 +420,7 @@ async def update_scrap_progress(new_update_id: int):
 
 
 
-async def get_tele_peer(target: str):
-    """
-    统一处理 channel/group/user 的 entity 获取
-    - 会自动补全 -100 前缀
-    - 会自动处理 username（@xxx）或 ID
-    """
-    if target.isdigit() and not target.startswith("-100"):
-        target = f"-100{target}"
-    try:
-        return await tele_client.get_entity(target)
-    except Exception as e:
-        raise RuntimeError(f"❌ 无法取得目标 chat 对象（{target}）：{e}")
+
 
 async def limited_polling():
     last_update_id = await get_last_update_id()
@@ -470,6 +458,26 @@ async def limited_polling():
         await asyncio.sleep(1)
 
     print("🛑 Polling stopped",flush=True)
+
+
+async def resolve_entity(chat_id_or_num: int | str):
+    """
+    将数字 chat_id 转为字符串格式并获取 Telegram entity
+    - 支持纯数字（int 或 str）
+    - 自动补 `-100` 前缀
+    """
+    if isinstance(chat_id_or_num, int):
+        chat_id_str = str(chat_id_or_num)
+    else:
+        chat_id_str = chat_id_or_num
+
+    if chat_id_str.isdigit():
+        chat_id_str = f"-100{chat_id_str}" if not chat_id_str.startswith("100") else f"-{chat_id_str}"
+
+    try:
+        return await tele_client.get_entity(chat_id_str)
+    except Exception as e:
+        raise RuntimeError(f"❌ 无法解析 chat_id={chat_id_or_num}，错误：{e}")
 
 async def process_one_grid_job():
     
@@ -666,8 +674,8 @@ async def process_one_grid_job():
 
     # 8)  备份:上传 ZIP 到指定 chat_id（优先环境变量，否则原 chat），并显示上传进度
     await start_telethon()
-    peer = await get_tele_peer(TELEGROUP_ARCHIVE)
-   
+ 
+    peer = await resolve_entity(TELEGROUP_ARCHIVE)
     sent = await tele_client.send_file(
         entity=peer,
         file=zip_path,
