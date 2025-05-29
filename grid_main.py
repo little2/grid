@@ -21,6 +21,7 @@ import subprocess
 from telethon import TelegramClient
 from telethon.sessions import StringSession
 from telethon.errors import FloodWaitError
+from telethon.errors import FileMigrateError
 from telethon.tl.functions.upload import GetFileRequest
 from telethon.tl.types import InputDocumentFileLocation
 
@@ -108,13 +109,25 @@ async def download_from_file_id3(
         )
     print(f"\n✔️ 下载完成：{save_path}",flush=True)
 
+
+async def safe_download(msg, save_path):
+    try:
+        await download_with_resume(msg, save_path)
+    except FileMigrateError as e:
+        print(f"🌐 DC迁移提示: 文件在 DC{e.new_dc}，尝试切换…")
+        await tele_client._switch_dc(e.new_dc)
+        await download_with_resume(msg, save_path)
+    except Exception as e:
+        print(f"⚠️ resume下载失败，尝试降级下载: {e}")
+        await msg.download_media(file=save_path)
+
 async def download_from_file_id(file_id, save_path, chat_id, message_id):
     await start_telethon()
     msg = await tele_client.get_messages(chat_id, ids=message_id)
     if not msg or not msg.media:
         raise RuntimeError(f"❌ 获取消息失败: {chat_id}/{message_id}")
     # Delegate to your chunked downloader:
-    await download_with_resume(msg, save_path)
+    await safe_download(msg, save_path)
     return True
 
 async def download_with_resume(msg, save_path, chunk_size: int = 128 * 1024):
@@ -127,12 +140,6 @@ async def download_with_resume(msg, save_path, chunk_size: int = 128 * 1024):
     """
     doc = msg.media.document
     total = doc.size
-
-    # 切换到文档所在的 DC
-    if hasattr(doc, 'dc_id'):
-        print(f"🌐 切换到 DC {doc.dc_id}...", flush=True)
-        await tele_client._switch_dc(doc.dc_id)  # 非公开 API，但目前稳定可用
-
 
     # 构造文件位置
     location = InputDocumentFileLocation(
