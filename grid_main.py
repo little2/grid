@@ -128,6 +128,12 @@ async def download_with_resume(msg, save_path, chunk_size: int = 128 * 1024):
     doc = msg.media.document
     total = doc.size
 
+    # 切换到文档所在的 DC
+    if hasattr(doc, 'dc_id'):
+        print(f"🌐 切换到 DC {doc.dc_id}...", flush=True)
+        await tele_client._switch_dc(doc.dc_id)  # 非公开 API，但目前稳定可用
+
+
     # 构造文件位置
     location = InputDocumentFileLocation(
         id=doc.id,
