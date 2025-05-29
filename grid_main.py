@@ -23,7 +23,7 @@ from telethon.sessions import StringSession
 from telethon.errors import FloodWaitError
 from telethon.errors import FileMigrateError
 from telethon.tl.functions.upload import GetFileRequest
-from telethon.tl.types import InputDocumentFileLocation
+from telethon.tl.types import InputDocumentFileLocation, InputPeerChannel
 
 load_dotenv()
 
@@ -658,21 +658,32 @@ async def process_one_grid_job():
     await start_telethon()
  
 
-    # 加上 -100 前缀 → 转为 Telegram 内部频道/群组识别 ID
-    TELEGROUP_ARCHIVE_STR = f"-100{TELEGROUP_ARCHIVE}"  # str: '-1001957442026'
 
-    # 获取可发送对象
-    peer = await tele_client.get_entity(TELEGROUP_ARCHIVE_STR)
 
-    sent = await tele_client.send_file(
-        entity=peer,
-        file=zip_path,
-        force_document=True,
-        caption=f"🔒 已打包并加密：{file_unique_id}.zip",
-        reply_to=message_id,
-        progress_callback=lambda cur, tot: telethon_upload_progress(cur, tot, zip_path)
-    )
+   
+    try:
+        entity = await tele_client.get_entity(f"-100{TELEGROUP_ARCHIVE}")  # 一次性跑通，telethon 会返回一个 Channel 对象
+        # 把这个 access_hash 存起来，下次直接用就不用再走 get_entity
+        channel_input = InputPeerChannel(entity.id, entity.access_hash)
+        sent = await tele_client.send_file(
+            entity=channel_input,
+            file=zip_path,
+            force_document=True,
+            caption=f"🔒 已打包并加密：{file_unique_id}.zip",
+            reply_to=message_id,
+            progress_callback=lambda cur, tot: telethon_upload_progress(cur, tot, zip_path)
+        )
     # 完成后换行
+
+    # 假设 TELEGROUP_ARCHIVE = 1957442026（int）
+    # aiogram 会自动识别这是一个频道/群组 ID
+    except Exception as e:
+        await bot.send_document(
+            chat_id=TELEGROUP_ARCHIVE,
+            document=FSInputFile(zip_path),
+            caption=f"🔒 已打包并加密：{file_unique_id}.zip",
+            reply_to_message_id=message_id
+        )
 
 
 
