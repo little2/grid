@@ -114,12 +114,12 @@ async def safe_download(msg, save_path, try_resume: bool = False):
     doc = getattr(msg.media, 'document', None)
     
     if not doc or not getattr(doc, 'file_reference', None):
-        print("⚠️ file_reference 缺失或不是文档类型，使用 fallback 方式下载")
+        print("⚠️ file_reference 缺失或不是文档类型，使用 fallback 方式下载",flush=True)
         await msg.download_media(file=save_path)
         return
 
     if not try_resume:
-        print("⏬ 已强制禁用断点续传，使用 download_media")
+        print("⏬ 已强制禁用断点续传，使用 download_media",flush=True)
         await msg.download_media(file=save_path)
         return
 
@@ -127,11 +127,11 @@ async def safe_download(msg, save_path, try_resume: bool = False):
     try:
         await download_with_resume(msg, save_path)
     except FileMigrateError as e:
-        print(f"🌐 DC迁移提示: 文件在 DC{e.new_dc}，尝试切换…")
+        print(f"🌐 DC迁移提示: 文件在 DC{e.new_dc}，尝试切换…",flush=True)
         await tele_client._switch_dc(e.new_dc)
         await download_with_resume(msg, save_path)
     except Exception as e:
-        print(f"⚠️ resume下载失败，尝试 fallback download_media: {e}")
+        print(f"⚠️ resume下载失败，尝试 fallback download_media: {e}",flush=True)
         await msg.download_media(file=save_path)
 
 
