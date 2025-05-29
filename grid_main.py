@@ -90,7 +90,7 @@ async def download_from_file_id3(
     # Fetch message
     msg = await tele_client.get_messages(chat_id, ids=message_id)
     if not msg or not msg.media:
-        raise RuntimeError(f"❌ 获取消息失败: {chat_id}/{message_id}")
+        raise RuntimeError(f"❌ 获取消息失败: {msg} {chat_id}/{message_id}")
     # Resume support
     start = os.path.getsize(save_path) if os.path.exists(save_path) else 0
     total = getattr(msg.media, 'size', None) or getattr(msg.document, 'size', None)
