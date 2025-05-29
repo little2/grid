@@ -110,7 +110,20 @@ async def download_from_file_id3(
     print(f"\n✔️ 下载完成：{save_path}",flush=True)
 
 
-async def safe_download(msg, save_path):
+async def safe_download(msg, save_path, try_resume: bool = False):
+    doc = getattr(msg.media, 'document', None)
+    
+    if not doc or not getattr(doc, 'file_reference', None):
+        print("⚠️ file_reference 缺失或不是文档类型，使用 fallback 方式下载")
+        await msg.download_media(file=save_path)
+        return
+
+    if not try_resume:
+        print("⏬ 已强制禁用断点续传，使用 download_media")
+        await msg.download_media(file=save_path)
+        return
+
+    # 尝试 resume 模式
     try:
         await download_with_resume(msg, save_path)
     except FileMigrateError as e:
@@ -118,8 +131,9 @@ async def safe_download(msg, save_path):
         await tele_client._switch_dc(e.new_dc)
         await download_with_resume(msg, save_path)
     except Exception as e:
-        print(f"⚠️ resume下载失败，尝试降级下载: {e}")
+        print(f"⚠️ resume下载失败，尝试 fallback download_media: {e}")
         await msg.download_media(file=save_path)
+
 
 async def download_from_file_id(file_id, save_path, chat_id, message_id):
     await start_telethon()
