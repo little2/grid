@@ -473,6 +473,9 @@ async def resolve_entity(chat_id_or_num: int | str):
 
     if chat_id_str.isdigit():
         chat_id_str = f"-100{chat_id_str}" if not chat_id_str.startswith("100") else f"-{chat_id_str}"
+    else:
+        if not chat_id_str.startswith("-100") and not chat_id_str.startswith("@"):
+            chat_id_str = f"-100{chat_id_str}"
 
     try:
         return await tele_client.get_entity(chat_id_str)
