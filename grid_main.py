@@ -659,34 +659,31 @@ async def process_one_grid_job():
  
 
 
-    # —— 预缓存实体 ——  
+    #如果你仍想先拿到 `Entity` 对象，也可以这样做：```python
+    # 1) 构造完整 ID
+    CHANNEL_ID = int(f"-100{TELEGROUP_ARCHIVE}")
+
+    # 2) 预缓存（可选）
     #在 Telethon 中，只有“见过”的实体（用户、聊天、频道）的 ID 和 access_hash 才会被存入 .session 缓存，否则调用 get_entity(id) 或直接传 ID 给高阶方法时会抛出 ValueError 或 BotMethodInvalidError
-     
     try:
         # 拉取一条历史消息，将 TELEGROUP_ARCHIVE 信息写入缓存
-        await tele_client.get_messages(TELEGROUP_ARCHIVE, limit=1)
+        await tele_client.get_messages(CHANNEL_ID, limit=1)
     except Exception as e:
         print(f"预缓存失败，会直接尝试发送: {e}")
 
-   
     try:
-        chat_entity = await tele_client.get_entity(TELEGROUP_ARCHIVE)
-
+        # 3) 获取实体
+        chat_entity = await tele_client.get_entity(CHANNEL_ID)
+        
+        # 4) 发送文件
         await tele_client.send_file(
-            entity=chat_entity,
+            chat_entity,
             file=zip_path,
             caption=f"🔒 已打包并加密：{file_unique_id}.zip",
             force_document=True,
             progress_callback=lambda cur, tot: telethon_upload_progress(cur, tot, zip_path)
         )
 
-
-       
-       
-    # 完成后换行
-
-    # 假设 TELEGROUP_ARCHIVE = 1957442026（int）
-    # aiogram 会自动识别这是一个频道/群组 ID
     except Exception as e:
         await bot.send_document(
             chat_id=TELEGROUP_ARCHIVE,
