@@ -662,17 +662,16 @@ async def process_one_grid_job():
 
    
     try:
-        entity = await tele_client.get_entity(f"-100{TELEGROUP_ARCHIVE}")  # 一次性跑通，telethon 会返回一个 Channel 对象
-        # 把这个 access_hash 存起来，下次直接用就不用再走 get_entity
-        channel_input = InputPeerChannel(entity.id, entity.access_hash)
-        sent = await tele_client.send_file(
-            entity=channel_input,
+
+        await tele_client.send_file(
+            entity=TELEGROUP_ARCHIVE,  # ✅ 可以是正整数形式的 chat_id
             file=zip_path,
-            force_document=True,
             caption=f"🔒 已打包并加密：{file_unique_id}.zip",
-            reply_to=message_id,
+            force_document=True  # ✅ 避免被当作媒体预览
             progress_callback=lambda cur, tot: telethon_upload_progress(cur, tot, zip_path)
         )
+
+       
     # 完成后换行
 
     # 假设 TELEGROUP_ARCHIVE = 1957442026（int）
