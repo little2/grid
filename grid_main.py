@@ -663,19 +663,13 @@ async def process_one_grid_job():
     # 1) 构造完整 ID
     CHANNEL_ID = int(f"-100{TELEGROUP_ARCHIVE}")
 
-    # 2) 预缓存（可选）
-    #在 Telethon 中，只有“见过”的实体（用户、聊天、频道）的 ID 和 access_hash 才会被存入 .session 缓存，否则调用 get_entity(id) 或直接传 ID 给高阶方法时会抛出 ValueError 或 BotMethodInvalidError
-    try:
-        # 拉取一条历史消息，将 TELEGROUP_ARCHIVE 信息写入缓存
-        await tele_client.get_messages(CHANNEL_ID, limit=1)
-    except Exception as e:
-        print(f"预缓存失败，会直接尝试发送: {e}")
+
 
     try:
-        # 3) 获取实体
+        # 2) 获取实体
         chat_entity = await tele_client.get_entity(CHANNEL_ID)
         
-        # 4) 发送文件
+        # 3) 发送文件
         await tele_client.send_file(
             chat_entity,
             file=zip_path,
