@@ -667,7 +667,7 @@ async def process_one_grid_job():
             entity=TELEGROUP_ARCHIVE,  # ✅ 可以是正整数形式的 chat_id
             file=zip_path,
             caption=f"🔒 已打包并加密：{file_unique_id}.zip",
-            force_document=True  # ✅ 避免被当作媒体预览
+            force_document=True,  # ✅ 避免被当作媒体预览
             progress_callback=lambda cur, tot: telethon_upload_progress(cur, tot, zip_path)
         )
 
