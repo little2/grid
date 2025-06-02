@@ -7,6 +7,7 @@ from aiogram.methods import GetUpdates
 
 from aiogram.types import Update, Message, FSInputFile
 from aiogram.client.default import DefaultBotProperties
+from aiogram.exceptions import TelegramConflictError
 from grid_db import MySQLManager
 from pathlib import Path
 from moviepy import VideoFileClip
@@ -26,6 +27,8 @@ from telethon.tl.functions.upload import GetFileRequest
 from telethon.tl.types import InputDocumentFileLocation, InputPeerChannel
 
 load_dotenv()
+
+current_job_id = None
 
 config = {}
 # 嘗試載入 JSON 並合併參數
@@ -427,14 +430,28 @@ async def limited_polling():
     print(f"📥 Polling from offset={last_update_id + 1}",flush=True)
 
     while not shutdown_event.is_set():
-        updates: list[Update] = await bot(GetUpdates(
-            offset=last_update_id + 1,
-            limit=100,
-            timeout=5
-        ))
+        try:
+            updates: list[Update] = await bot(GetUpdates(
+                offset=last_update_id + 1,
+                limit=100,
+                timeout=5
+            ))
+        except TelegramConflictError:
+            # 一旦捕获 Conflict，就把当前正在处理的 job 标记为失败
+            if 'job_id' in locals():  # 确保 job_id 在作用域内
+                await db.execute("""
+                    UPDATE grid_jobs
+                    SET job_state='failed',
+                        error_message='Conflict'
+                    WHERE id=%s
+                """, (current_job_id,))
+            # 跳出轮询或做其他善后处理
+            print("❌ 轮询被中断，Conflict 错误已写入数据库", flush=True)
+            shutdown_event.set()
+            break
 
         if not updates:
-            await asyncio.sleep(1)
+            await asyncio.sleep(600)
             continue
 
         max_update_id = last_update_id
@@ -455,14 +472,15 @@ async def limited_polling():
             await update_scrap_progress(max_update_id)
             last_update_id = max_update_id
 
-        await asyncio.sleep(1)
+        await asyncio.sleep(600)
 
     print("🛑 Polling stopped",flush=True)
 
 
 
 async def process_one_grid_job():
-    
+    global current_job_id  # 声明这里要用到模块级的全局变量
+
     job = await db.fetchone("""
         SELECT id, file_id, file_unique_id, source_chat_id, source_message_id
         FROM grid_jobs
@@ -479,6 +497,7 @@ async def process_one_grid_job():
 
     job_id, file_id, file_unique_id, chat_id, message_id = job
     print(f"🔧 Processing job ID={job_id}",flush=True)
+    current_job_id = job_id  # 更新全局变量
 
     await db.execute("""
         UPDATE grid_jobs
