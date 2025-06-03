@@ -565,16 +565,15 @@ async def process_one_grid_job():
             caption=f"|_forward_|-100{TELEGROUP_THUMB}",
         )
 
+    except Exception as e:
+        print(f"❌ 发送预览图到备用频道失败: {e} {TELEGROUP_THUMB}", flush=True)
+        
+    try:
         sent = await bot.send_photo(
             chat_id=chat_id,
             photo=input_file,
             reply_to_message_id=message_id
         )
-
-
-
-
-
 
     except Exception as e:
         print(f"❌ 上传预览图失败: {e}", flush=True)
