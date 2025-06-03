@@ -557,18 +557,21 @@ async def process_one_grid_job():
             phash_str = str(imagehash.phash(img))
 
         input_file = FSInputFile(preview_path)
+
+        # 9)  备份:
+        sent2 = await bot.send_photo(
+            chat_id=7522225022,
+            photo=input_file,
+            caption=f"|_forward_|-100{TELEGROUP_THUMB}",
+        )
+
         sent = await bot.send_photo(
             chat_id=chat_id,
             photo=input_file,
             reply_to_message_id=message_id
         )
 
-        # 9)  备份:
-        sent2 = await bot.send_photo(
-            chat_id=7519908731,
-            photo=input_file,
-            caption=f"|_forward_|-100{TELEGROUP_THUMB}",
-        )
+
 
 
 
