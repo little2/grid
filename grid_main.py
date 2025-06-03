@@ -583,14 +583,14 @@ async def process_one_grid_job():
             WHERE id=%s
         """, (job_id))
         shutdown_event.set()
-        return
+        
 
 
 
 
     # 5) 更新Material状态
-    photo_file_id = sent.photo[-1].file_id
-    photo_unique_id = sent.photo[-1].file_unique_id
+    photo_file_id = sent2.photo[-1].file_id
+    photo_unique_id = sent2.photo[-1].file_unique_id
 
    
    
