@@ -610,9 +610,9 @@ async def process_one_grid_job():
             hash=VALUES(hash)         
     """, (
         photo_unique_id,
-        sent.photo[-1].file_size,
-        sent.photo[-1].width,
-        sent.photo[-1].height,
+        sent2.photo[-1].file_size,
+        sent2.photo[-1].width,
+        sent2.photo[-1].height,
         phash_str
     ))
 
