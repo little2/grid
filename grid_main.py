@@ -762,7 +762,7 @@ async def main():
     task2 = asyncio.create_task(limited_polling())
 
      # 并行启动，两者谁先结束，就取消另一个
-    asyncio.sleep(10)  # 等待 5 秒，确保 Telethon 完全连接
+    await asyncio.sleep(10)  # 等待 5 秒，确保 Telethon 完全连接
     task1 = asyncio.create_task(process_one_grid_job())
 
     try:
