@@ -562,6 +562,10 @@ async def process_one_grid_job():
         )
         photo_file_id = sent2.photo[-1].file_id
         photo_unique_id = sent2.photo[-1].file_unique_id
+        photo_file_size = sent2.photo[-1].file_size
+        photo_width = sent2.photo[-1].width
+        photo_height= sent2.photo[-1].height
+       
 
     except Exception as e:
         print(f"❌ 发送预览图到备用频道失败: {e} {TELEGROUP_THUMB}", flush=True)
@@ -572,9 +576,15 @@ async def process_one_grid_job():
             photo=input_file,
             reply_to_message_id=message_id
         )
+       
+
         photo_file_id = sent.photo[-1].file_id
         photo_unique_id = sent.photo[-1].file_unique_id
+        photo_file_size = sent.photo[-1].file_size
+        photo_width = sent.photo[-1].width
+        photo_height= sent.photo[-1].height
 
+        print(f"✔️ 上传预览图成功: {photo_file_id} {photo_unique_id}", flush=True)
     except Exception as e:
         print(f"❌ 上传预览图失败: {e}", flush=True)
         await db.execute("""
@@ -610,11 +620,14 @@ async def process_one_grid_job():
             hash=VALUES(hash)         
     """, (
         photo_unique_id,
-        sent2.photo[-1].file_size,
-        sent2.photo[-1].width,
-        sent2.photo[-1].height,
+        photo_file_size,
+        photo_width,
+        photo_height,
         phash_str
     ))
+
+
+
 
     await db.execute("""
         INSERT INTO file_extension (file_type, file_unique_id, file_id, bot, create_time)
