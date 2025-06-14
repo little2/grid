@@ -490,7 +490,7 @@ async def process_one_grid_job():
     """, (BOT_NAME,))
 
     if not job:
-        print("📭 No pending job found")
+        print("📭 No Pending Job Found")
         await asyncio.sleep(60)
         shutdown_event.set()
         return
@@ -576,7 +576,6 @@ async def process_one_grid_job():
             photo=input_file,
             reply_to_message_id=message_id
         )
-       
 
         photo_file_id = sent.photo[-1].file_id
         photo_unique_id = sent.photo[-1].file_unique_id
@@ -596,15 +595,6 @@ async def process_one_grid_job():
     if photo_file_id is None:
         shutdown_event.set()
         
-
-
-
-
-
-
-   
-   
-
     await db.execute("""
         INSERT INTO photo (
             file_unique_id, file_size, width, height, file_name,
