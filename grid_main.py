@@ -505,7 +505,9 @@ async def process_one_grid_job():
         WHERE id=%s
     """, (job_id))
 
-
+   
+    photo_file_id = None
+    photo_unique_id = None
 
 
     # 1) 准备临时目录
@@ -528,15 +530,9 @@ async def process_one_grid_job():
         shutdown_event.set()
         return
         
-
-
     # 让主循环继续等待下一个任务
     # 这里可以选择等待一段时间再重试
     
-    
-
-        
-
     # 3) 生成预览图
     try:
         preview_basename = str(temp_dir / f"preview_{file_unique_id}")
@@ -564,6 +560,8 @@ async def process_one_grid_job():
             photo=input_file,
             caption=f"|_forward_|-100{TELEGROUP_THUMB}",
         )
+        photo_file_id = sent2.photo[-1].file_id
+        photo_unique_id = sent2.photo[-1].file_unique_id
 
     except Exception as e:
         print(f"❌ 发送预览图到备用频道失败: {e} {TELEGROUP_THUMB}", flush=True)
@@ -574,6 +572,8 @@ async def process_one_grid_job():
             photo=input_file,
             reply_to_message_id=message_id
         )
+        photo_file_id = sent.photo[-1].file_id
+        photo_unique_id = sent.photo[-1].file_unique_id
 
     except Exception as e:
         print(f"❌ 上传预览图失败: {e}", flush=True)
@@ -582,15 +582,15 @@ async def process_one_grid_job():
             SET job_state='failed',error_message='上传预览图失败'
             WHERE id=%s
         """, (job_id))
+
+    if photo_file_id is None:
         shutdown_event.set()
         
 
 
 
 
-    # 5) 更新Material状态
-    photo_file_id = sent2.photo[-1].file_id
-    photo_unique_id = sent2.photo[-1].file_unique_id
+
 
    
    
