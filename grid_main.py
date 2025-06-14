@@ -656,6 +656,16 @@ async def process_one_grid_job():
         )
     )
 
+    await db.execute(
+        """
+        UPDATE sora_content SET thumb_file_unique_id = %s, stage = 'pending' WHERE source_id = %s
+        """,
+        (
+            photo_unique_id,
+            file_unique_id
+        )
+    )
+
     # 6) 更新任务状态
     await db.execute("""
         UPDATE grid_jobs
