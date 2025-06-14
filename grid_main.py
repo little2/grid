@@ -556,7 +556,7 @@ async def process_one_grid_job():
 
         # 9)  备份:
         sent2 = await bot.send_photo(
-            chat_id=7522225022,
+            chat_id=7731408838,
             photo=input_file,
             caption=f"|_forward_|-100{TELEGROUP_THUMB}",
         )
