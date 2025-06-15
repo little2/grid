@@ -568,7 +568,7 @@ async def process_one_grid_job():
        
 
     except Exception as e:
-        print(f"❌ 发送预览图到备用频道失败: {e} {TELEGROUP_THUMB}", flush=True)
+        print(f"❌ 发送预览图失败: {e} {TELEGROUP_THUMB}", flush=True)
         
     try:
         sent = await bot.send_photo(
@@ -583,12 +583,12 @@ async def process_one_grid_job():
         photo_width = sent.photo[-1].width
         photo_height= sent.photo[-1].height
 
-        print(f"✔️ 上传预览图成功: {photo_file_id} {photo_unique_id}", flush=True)
+        print(f"✔️ 回覆预览图成功: {photo_file_id} {photo_unique_id}", flush=True)
     except Exception as e:
-        print(f"❌ 上传预览图失败: {e}", flush=True)
+        print(f"❌ 回覆预览图失败: {e}", flush=True)
         await db.execute("""
             UPDATE grid_jobs
-            SET job_state='failed',error_message='上传预览图失败'
+            SET job_state='failed',error_message='回覆预览图失败'
             WHERE id=%s
         """, (job_id))
 
