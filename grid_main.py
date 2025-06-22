@@ -44,7 +44,7 @@ API_ID = int(config.get('api_id', os.getenv('API_ID', 0)))
 API_HASH = config.get('api_hash', os.getenv('API_HASH', ''))
 TELEGROUP_THUMB = int(config.get('telegroup_thumb', os.getenv('TELEGROUP_THUMB', 0)))
 TELEGROUP_ARCHIVE = int(config.get('telegroup_archive', os.getenv('TELEGROUP_ARCHIVE', 0)))
-
+TELEGROUP_RELY_BOT = int(config.get('telegroup_rely_bot', os.getenv('TELEGROUP_RELY_BOT', 0)))
 
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 tele_client = TelegramClient(StringSession(), API_ID, API_HASH)
@@ -518,6 +518,7 @@ async def process_one_grid_job():
     # 2) 下载视频
     try:
         video_path = str(temp_dir / f"{file_unique_id}.mp4")
+        print(f"📥 开始下载视频: {video_path}", flush=True)
         await download_from_file_id(file_id, video_path, chat_id, message_id)
     except Exception as e:
         print(f"❌ 下载视频失败471: {e} {file_unique_id} ({file_id})", flush=True)
@@ -556,7 +557,7 @@ async def process_one_grid_job():
 
         # 9)  备份:
         sent2 = await bot.send_photo(
-            chat_id=7731408838,
+            chat_id={TELEGROUP_RELY_BOT},
             photo=input_file,
             caption=f"|_forward_|-100{TELEGROUP_THUMB}",
         )
@@ -565,10 +566,10 @@ async def process_one_grid_job():
         photo_file_size = sent2.photo[-1].file_size
         photo_width = sent2.photo[-1].width
         photo_height= sent2.photo[-1].height
-       
+        print(f"✔️ 透过RELY发送预览图到分镜图群成功: {e}", flush=True)
 
     except Exception as e:
-        print(f"❌ 发送预览图失败: {e} {TELEGROUP_THUMB}", flush=True)
+        print(f"❌ 透过RELY发送预览图到分镜图群失败: {e} {TELEGROUP_RELY_BOT} {TELEGROUP_THUMB}", flush=True)
         
     try:
         sent = await bot.send_photo(
@@ -658,11 +659,15 @@ async def process_one_grid_job():
 
     await db.execute(
         """
-        UPDATE sora_content SET thumb_file_unique_id = %s, stage = 'pending' WHERE source_id = %s
+        INSERT INTO sora_content (source_id, thumb_file_unique_id, stage)
+        VALUES (%s, %s, 'pending')
+        ON DUPLICATE KEY UPDATE
+            thumb_file_unique_id = VALUES(thumb_file_unique_id),
+            stage = 'pending'
         """,
         (
-            photo_unique_id,
-            file_unique_id
+            file_unique_id,
+            photo_unique_id
         )
     )
 
