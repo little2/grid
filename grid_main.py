@@ -557,7 +557,7 @@ async def process_one_grid_job():
 
         # 9)  备份:
         sent2 = await bot.send_photo(
-            chat_id={TELEGROUP_RELY_BOT},
+            chat_id=TELEGROUP_RELY_BOT,
             photo=input_file,
             caption=f"|_forward_|-100{TELEGROUP_THUMB}",
         )
@@ -670,6 +670,8 @@ async def process_one_grid_job():
             photo_unique_id
         )
     )
+
+    print(f"✔️ 预览图已入库: {photo_file_id} {photo_unique_id}", flush=True)
 
     # 6) 更新任务状态
     await db.execute("""
