@@ -199,7 +199,7 @@ async def make_keyframe_grid(
     rows: int = 3,
     cols: int = 3
 ) -> str:
-    print(f"👉 Generated keyframe grid starting", flush=True)
+    
     # 1. 抽帧并拼成网格
     clip = VideoFileClip(video_path)
     n = rows * cols
@@ -496,7 +496,7 @@ async def process_one_grid_job():
         return
 
     job_id, file_id, file_unique_id, chat_id, message_id = job
-    print(f"🔧 Processing job ID={job_id}",flush=True)
+    print(f"(1) 🔧 Processing job ID={job_id}",flush=True)
     current_job_id = job_id  # 更新全局变量
 
     await db.execute("""
@@ -518,7 +518,7 @@ async def process_one_grid_job():
     # 2) 下载视频
     try:
         video_path = str(temp_dir / f"{file_unique_id}.mp4")
-        print(f"📥 开始下载视频: {video_path}", flush=True)
+        print(f"(2) 📥 开始下载视频: {video_path}", flush=True)
         await download_from_file_id(file_id, video_path, chat_id, message_id)
     except Exception as e:
         print(f"❌ 下载视频失败471: {e} {file_unique_id} ({file_id})", flush=True)
@@ -537,6 +537,7 @@ async def process_one_grid_job():
     # 3) 生成预览图
     try:
         preview_basename = str(temp_dir / f"preview_{file_unique_id}")
+        print(f"(3) 👉 Generated keyframe grid starting", flush=True)
         preview_path = await make_keyframe_grid(video_path, preview_basename)
     except Exception as e:
         await db.execute("""
@@ -566,10 +567,10 @@ async def process_one_grid_job():
         photo_file_size = sent2.photo[-1].file_size
         photo_width = sent2.photo[-1].width
         photo_height= sent2.photo[-1].height
-        print(f"✔️ 透过RELY发送预览图到分镜图群成功: {e}", flush=True)
+        print(f"(4.1)✔️ 透过RELY发送预览图到分镜图群成功: {e}", flush=True)
 
     except Exception as e:
-        print(f"❌ 透过RELY发送预览图到分镜图群失败: {e} {TELEGROUP_RELY_BOT} {TELEGROUP_THUMB}", flush=True)
+        print(f"(4.1) ❌ 透过RELY发送预览图到分镜图群失败: {e} {TELEGROUP_RELY_BOT} {TELEGROUP_THUMB}", flush=True)
         
     try:
         sent = await bot.send_photo(
@@ -584,9 +585,9 @@ async def process_one_grid_job():
         photo_width = sent.photo[-1].width
         photo_height= sent.photo[-1].height
 
-        print(f"✔️ 回覆预览图成功: {photo_file_id} {photo_unique_id}", flush=True)
+        print(f"(4.2) ✔️ 回覆预览图成功: {photo_file_id} {photo_unique_id}", flush=True)
     except Exception as e:
-        print(f"❌ 回覆预览图失败: {e}", flush=True)
+        print(f"(4.2) ❌ 回覆预览图失败: {e}", flush=True)
         await db.execute("""
             UPDATE grid_jobs
             SET job_state='failed',error_message='回覆预览图失败'
@@ -671,7 +672,7 @@ async def process_one_grid_job():
         )
     )
 
-    print(f"✔️ 预览图已入库: {photo_file_id} {photo_unique_id}", flush=True)
+    print(f"(5) ✔️ 预览图已入库: {photo_file_id} {photo_unique_id}", flush=True)
 
     # 6) 更新任务状态
     await db.execute("""
@@ -693,7 +694,7 @@ async def process_one_grid_job():
         zip_path,
         file_unique_id
     )
-    print(f"✔️ Created ZIP archive: {zip_path}")
+    print(f"(6) ✔️ Created ZIP archive: {zip_path}",flush=True)
 
     # 8)  备份:上传 ZIP 到指定 chat_id（优先环境变量，否则原 chat），并显示上传进度
     await start_telethon()
@@ -730,12 +731,12 @@ async def process_one_grid_job():
 
 
     print()
-    print(f"✅ ZIP 已发送到 chat_id={chat_id}",flush=True)
+    print(f"(7) ✅ ZIP 已发送到 chat_id={chat_id}",flush=True)
 
 
 
 
-    print(f"✅ Job ID={job_id} completed",flush=True)
+    print(f"(8) ✅ Job ID={job_id} completed",flush=True)
     shutdown_event.set()
 
         
