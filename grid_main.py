@@ -568,7 +568,7 @@ async def process_one_grid_job():
         photo_file_size = sent2.photo[-1].file_size
         photo_width = sent2.photo[-1].width
         photo_height= sent2.photo[-1].height
-        print(f"(4.1)✔️ 透过RELY发送预览图到分镜图群成功: {e}", flush=True)
+        print(f"(4.1)✔️ 透过RELY发送预览图到分镜图群成功", flush=True)
 
     except Exception as e:
         print(f"(4.1) ❌ 透过RELY发送预览图到分镜图群失败: {e} {TELEGROUP_RELY_BOT} {TELEGROUP_THUMB}", flush=True)
