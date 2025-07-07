@@ -310,11 +310,11 @@ async def handle_video(message: Message):
         if rows:
             for file_id_result, bot_name in rows:
                 if bot_name == BOT_NAME:
-                    print("-- ✅ 縮圖已存在",flush=True)
-                    await message.answer_photo(file_id_result, caption="✅ 縮圖已存在")
+                    print("-- 🧊 縮圖已存在",flush=True)
+                    await message.answer_photo(file_id_result, caption="(✅) 縮圖已存在")
                     return
                 else:
-                    print("-- ✅ 縮圖已存在,但是在别的BOT,不用生成",flush=True)
+                    print("-- 🧊 縮圖已存在,但是在别的BOT,不用生成",flush=True)
                     # await bypass(file_id_result, bot_name, BOT_NAME)
                     return
         else:
@@ -497,7 +497,7 @@ async def process_one_grid_job():
         return
 
     job_id, file_id, file_unique_id, chat_id, message_id = job
-    print(f"(1) 🔧 Processing job ID={job_id}",flush=True)
+    print(f"✅ (1) 🔧 Processing job ID={job_id}",flush=True)
     current_job_id = job_id  # 更新全局变量
 
     await db.execute("""
