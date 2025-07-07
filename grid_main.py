@@ -338,9 +338,9 @@ async def handle_video(message: Message):
             )
             VALUES (%s, %s, 'video', %s, 'pending', NOW(), 0, %s, %s)
             ON DUPLICATE KEY UPDATE
-                job_state      = 'pending',
-                scheduled_at   = NOW(),
-                retry_count    = retry_count + 1,
+                job_state      = job_state,
+                scheduled_at   = scheduled_at,
+                retry_count    = retry_count,
                 source_chat_id = VALUES(source_chat_id),
                 source_message_id = VALUES(source_message_id)
         """, (
@@ -522,13 +522,15 @@ async def process_one_grid_job():
         print(f"(2) 📥 开始下载视频: {video_path}", flush=True)
         await download_from_file_id(file_id, video_path, chat_id, message_id)
     except Exception as e:
-        print(f"❌ 下载视频失败471: {e} {file_unique_id} ({file_id})", flush=True)
+        
         # 抛出错误
         await db.execute("""
             UPDATE grid_jobs
             SET job_state='failed',error_message='下载视频失败'
             WHERE id=%s
         """, (job_id))
+
+        print(f"❌ 下载视频失败471: {e} {file_unique_id} ({file_id})", flush=True)
        
         await process_one_grid_job()
         return
