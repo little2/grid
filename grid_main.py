@@ -55,7 +55,8 @@ db = MySQLManager({
     "user": config.get('db_user', os.getenv('MYSQL_DB_USER')),
     "password": config.get('db_password', os.getenv('MYSQL_DB_PASSWORD')),
     "db": config.get('db_name', os.getenv('MYSQL_DB_NAME')),
-    "autocommit": True
+    "autocommit": True,
+    "pool_recycle" : 3600
 })
 
 
@@ -784,6 +785,7 @@ async def main():
     finally:
         # 不管如何，都优雅地关掉 session 和连接池
         await shutdown()
+        
 
 
 if __name__ == "__main__":
