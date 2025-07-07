@@ -529,7 +529,8 @@ async def process_one_grid_job():
             SET job_state='failed',error_message='下载视频失败'
             WHERE id=%s
         """, (job_id))
-        shutdown_event.set()
+       
+        await process_one_grid_job()
         return
         
     # 让主循环继续等待下一个任务
