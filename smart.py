@@ -1,172 +1,150 @@
+
 import os
-import numpy as np
-from PIL import Image, ImageDraw, ImageFont
-from moviepy.editor import VideoFileClip
-import face_recognition
-from sklearn.cluster import DBSCAN
-from pathlib import Path
-import concurrent.futures
+import sys
+import time
 import json
-from hashlib import md5
+import traceback
+import numpy as np
+from PIL import Image, ImageDraw
+from moviepy.editor import VideoFileClip
+from insightface.app import FaceAnalysis
+from insightface.utils import face_align
+from sklearn.cluster import DBSCAN
+from multiprocessing import Process, Queue
+from pathlib import Path
 
-
-def is_black_frame(pil_img, threshold=10, ratio=0.95):
-    gray = pil_img.convert('L')
-    pixels = np.array(gray)
-    dark_pixels = (pixels < threshold).sum()
-    return (dark_pixels / pixels.size) > ratio
-
-
-def smart_sample_timestamps(duration, max_frames=60, min_gap=1.0):
-    times = []
-    gap = duration / (max_frames + 1)
-    for i in range(max_frames):
-        t = gap * (i + 1)
-        if not times or (t - times[-1]) >= min_gap:
-            times.append(t)
-    return times
-
-
-def extract_valid_frames(video_path, max_frames=60):
-    clip = VideoFileClip(video_path)
-    timestamps = smart_sample_timestamps(clip.duration, max_frames)
-
-    def process_time(t):
-        try:
-            frame = Image.fromarray(clip.get_frame(t))
-            if not is_black_frame(frame):
-                return (t, frame)
-        except Exception:
-            return None
-
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        results = list(executor.map(process_time, timestamps))
-
-    return [r for r in results if r is not None]
-
-
-def get_face_data(frames, max_face_frames=25):
-    encodings, locations, indices = [], [], []
-    for i, (t, img) in enumerate(frames[:max_face_frames]):
-        img_np = np.array(img)[:, :, ::-1]  # RGB to BGR
-        locs = face_recognition.face_locations(img_np)
-        encs = face_recognition.face_encodings(img_np, locs)
-        for loc, enc in zip(locs, encs):
-            encodings.append(enc)
-            locations.append(loc)
-            indices.append(i)
-    return encodings, locations, indices
-
-
-def cluster_faces(encodings):
-    if not encodings:
-        return []
-    clustering = DBSCAN(metric='euclidean', eps=0.5, min_samples=1)
-    return clustering.fit_predict(encodings)
-
-
-def select_main_face_frame(frames, encodings, locations, indices, labels):
-    if not labels.any():
+def extract_frame_at(video_path, timestamp):
+    try:
+        clip = VideoFileClip(video_path)
+        frame = clip.get_frame(timestamp)
+        clip.reader.close()
+        if clip.audio:
+            clip.audio.reader.close_proc()
+        return Image.fromarray(frame)
+    except Exception as e:
+        print(f"⚠️ 抽帧异常 @ {timestamp:.2f}s: {e}", flush=True)
         return None
-    counts = np.bincount(labels)
-    main_label = counts.argmax()
-    max_area = -1
-    best_idx = None
-    for i, (enc, loc, idx, label) in enumerate(zip(encodings, locations, indices, labels)):
-        if label == main_label:
-            top, right, bottom, left = loc
-            area = (right - left) * (bottom - top)
-            if area > max_area:
-                max_area = area
-                best_idx = idx
-    return best_idx
 
+def detect_faces(image, app):
+    img_np = np.array(image)
+    faces = app.get(img_np)
+    return faces
 
-def hash_image(pil_img):
-    return md5(pil_img.tobytes()).hexdigest()
+def extract_valid_frames_worker(video_path, timestamps, queue):
+    try:
+        app = FaceAnalysis(name="buffalo_l", providers=["CPUExecutionProvider"])
+        app.prepare(ctx_id=0, det_size=(640, 640))
 
+        results = []
+        for t in timestamps:
+            img = extract_frame_at(video_path, t)
+            if img is None:
+                continue
+            faces = detect_faces(img, app)
+            if faces:
+                results.append((t, img, faces))
+                print(f"✅ 有效画面 @ {t:.2f}s", flush=True)
+            else:
+                print(f"⚠️ Frame @ {t:.2f}s failed: 无人脸", flush=True)
+        queue.put(results)
+    except Exception as e:
+        print(f"❌ 抽帧子进程异常: {e}")
+        traceback.print_exc()
+        queue.put([])
 
-def make_smart_keyframe_grid(video_path: str, preview_basename: str, max_frames=60):
-    valid_frames = extract_valid_frames(video_path, max_frames)
-    if len(valid_frames) < 1:
-        raise RuntimeError("❌ 没有可用画面")
+def safe_extract_valid_frames(video_path, max_frames=60, timeout=60):
+    clip = VideoFileClip(video_path)
+    duration = clip.duration
+    timestamps = np.linspace(0, duration, max_frames).tolist()
+    clip.reader.close()
+    if clip.audio:
+        clip.audio.reader.close_proc()
 
-    encodings, locations, indices = get_face_data(valid_frames)
-    labels = cluster_faces(encodings)
-    main_idx = select_main_face_frame(valid_frames, encodings, locations, indices, labels)
-    if main_idx is None:
-        main_idx = 0
+    queue = Queue()
+    p = Process(target=extract_valid_frames_worker, args=(video_path, timestamps, queue))
+    p.start()
+    p.join(timeout)
 
-    selected_frames = [valid_frames[main_idx]]
-    seen_hashes = {hash_image(valid_frames[main_idx][1])}
-    rest = [i for i in range(len(valid_frames)) if i != main_idx]
-    rest_sorted = sorted(rest, key=lambda i: valid_frames[i][0])
+    if p.is_alive():
+        print("❌ 超过整体 60 秒限制，强制退出抽帧任务", flush=True)
+        p.terminate()
+        p.join()
+        return []
 
-    for i in rest_sorted:
-        h = hash_image(valid_frames[i][1])
-        if h not in seen_hashes:
-            selected_frames.append(valid_frames[i])
-            seen_hashes.add(h)
-        if len(selected_frames) == 9:
+    results = queue.get()
+    print(f"🎞️ 成功提取 {len(results)} 张有效画面（耗时 {timeout:.1f}s）", flush=True)
+    return results
+
+def cluster_faces(faces):
+    embeddings = [f.embedding for f in faces]
+    if len(embeddings) == 0:
+        return [], []
+    X = np.stack(embeddings)
+    clustering = DBSCAN(eps=12, min_samples=2, metric="cosine").fit(X)
+    return clustering.labels_, X
+
+def make_grid(images, positions, grid_size=(3, 3), image_size=(320, 180)):
+    grid_width = grid_size[0] * image_size[0]
+    grid_height = grid_size[1] * image_size[1]
+    grid_img = Image.new("RGB", (grid_width, grid_height), color=(0, 0, 0))
+
+    for idx, img in enumerate(images):
+        if idx >= grid_size[0] * grid_size[1]:
             break
-
-    # 构建九宫格
-    cell = 320
-    grid_img = Image.new('RGB', (cell * 3, cell * 3), 'black')
-    positions = {
-        0: (0, 0, 2, 2),
-        1: (2, 0, 1, 1),
-        2: (2, 1, 1, 1),
-        3: (0, 2, 1, 1),
-        4: (1, 2, 1, 1),
-        5: (2, 2, 1, 1),
-        6: (0, 3, 1, 1),
-        7: (1, 3, 1, 1),
-        8: (2, 3, 1, 1),
-    }
-
-    meta = []
-    for idx, (t, img) in enumerate(selected_frames):
-        pos = positions[idx]
-        w, h = pos[2]*cell, pos[3]*cell
-        resized = img.resize((w, h))
-        x, y = pos[0]*cell, pos[1]*cell
+        resized = img.resize(image_size)
+        x = (idx % grid_size[0]) * image_size[0]
+        y = (idx // grid_size[0]) * image_size[1]
         grid_img.paste(resized, (x, y))
+    return grid_img
 
-        # 人脸识别
-        img_np = np.array(img)[:, :, ::-1]
-        face_data = []
-        face_locs = face_recognition.face_locations(img_np)
-        face_encs = face_recognition.face_encodings(img_np, face_locs)
-        for loc, enc in zip(face_locs, face_encs):
-            face_data.append({
-                "location": loc,
-                "embedding": enc.tolist()
-            })
+def make_smart_keyframe_grid(video_path, output_dir="output", max_frames=60, detect_faces=True):
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    valid_frames = safe_extract_valid_frames(video_path, max_frames=max_frames, timeout=60)
 
-        meta.append({
-            "index": idx,
-            "timestamp": t,
-            "faces": face_data
-        })
+    if not valid_frames:
+        print("❌ 无有效帧，终止处理", flush=True)
+        return None
 
-    # 加文字浮水印
-    draw = ImageDraw.Draw(grid_img)
-    font_path = "fonts/Roboto_Condensed-Regular.ttf"
-    font_size = 24
-    font = ImageFont.truetype(font_path, size=font_size) if os.path.exists(font_path) else ImageFont.load_default()
-    text = Path(preview_basename).name
-    if text.startswith("preview_"):
-        text = text[len("preview_"):]
-    draw.text((grid_img.width - 10 - len(text)*font_size//2, grid_img.height - font_size - 10), text, fill=(255, 255, 255), font=font)
+    all_faces = []
+    for t, img, faces in valid_frames:
+        all_faces.extend(faces)
 
-    out_path = f"{preview_basename}.jpg"
+    labels, embeddings = cluster_faces(all_faces)
+    if len(set(labels)) <= 1:
+        print("⚠️ 无法识别主角，使用默认顺序", flush=True)
+        selected = valid_frames[:9]
+    else:
+        largest_cluster = np.argmax(np.bincount(labels[labels >= 0]))
+        main_faces = [f for f, l in zip(all_faces, labels) if l == largest_cluster]
+        main_face_embeddings = set(f.embedding.tobytes() for f in main_faces)
+
+        selected = []
+        for t, img, faces in valid_frames:
+            for f in faces:
+                if f.embedding.tobytes() in main_face_embeddings:
+                    selected.append((t, img))
+                    break
+        selected = selected[:9]
+
+    images = [img for _, img in selected]
+    grid_img = make_grid(images, positions=None)
+    out_path = os.path.join(output_dir, f"preview_{Path(video_path).stem}.jpg")
     grid_img.save(out_path)
-    print(f"✔️ Smart keyframe grid saved: {out_path}")
-
-    json_path = f"{preview_basename}.json"
-    with open(json_path, 'w', encoding='utf-8') as f:
-        json.dump(meta, f, ensure_ascii=False, indent=2)
-    print(f"✔️ Metadata JSON saved: {json_path}")
-
+    print(f"✅ 九宫格预览图已保存至 {out_path}", flush=True)
     return out_path
+
+if __name__ == "__main__":
+    video_path = sys.argv[1] if len(sys.argv) > 1 else "video.mp4"
+    print(f"📽️ 开始处理视频: {video_path}", flush=True)
+
+    output_path = make_smart_keyframe_grid(
+        video_path,
+        output_dir="preview_outputs",
+        max_frames=80,
+        detect_faces=True
+    )
+
+    if output_path:
+        print(f"✅ 完成生成关键帧预览图：{output_path}", flush=True)
+    else:
+        print("❌ 处理失败", flush=True)

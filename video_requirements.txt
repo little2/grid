@@ -1,0 +1,9 @@
+moviepy>=1.0.3
+numpy>=1.21.0
+resemblyzer==0.1.4
+scikit-learn>=1.0.2
+openai-whisper>=20231116
+librosa>=0.10.1
+soundfile>=0.12.1
+torch>=1.10.0
+ffmpeg-python>=0.2.0

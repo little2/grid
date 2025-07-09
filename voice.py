@@ -104,5 +104,5 @@ def analyze_video(input_path: str, num_speakers: int = None, output_json: str = 
 
 # ✅ 使用範例：
 if __name__ == "__main__":
-    video_path = "sample_video.mp4"
+    video_path = "video3.mp4"
     analyze_video(video_path, num_speakers=None, output_json="output.json")

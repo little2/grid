@@ -5,3 +5,12 @@ __pycache__/grid_db.cpython-312.pyc
 __pycache__
 *.env
 .gitignore
+venv311_rebuild/*
+venv/*
+venv/bin/activate.csh
+video.mp4
+video2.mp4
+video3.MP4
+video4.mp4
+video5.mp4
+preview_demo.jpg
