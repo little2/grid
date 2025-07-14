@@ -50,9 +50,9 @@ def extract_valid_frames_worker(video_path, timestamps, queue):
     except Exception as e:
         print(f"❌ 抽帧子进程异常: {e}")
         traceback.print_exc()
-        queue.put([])
+        queue.put(results)
 
-def safe_extract_valid_frames(video_path, max_frames=60, timeout=60):
+def safe_extract_valid_frames(video_path, max_frames=60, timeout=600):
     clip = VideoFileClip(video_path)
     duration = clip.duration
     timestamps = np.linspace(0, duration, max_frames).tolist()
@@ -134,7 +134,7 @@ def make_smart_keyframe_grid(video_path, output_dir="output", max_frames=60, det
     return out_path
 
 if __name__ == "__main__":
-    video_path = sys.argv[1] if len(sys.argv) > 1 else "video.mp4"
+    video_path = sys.argv[1] if len(sys.argv) > 1 else "video_2025-07-13_03-07-40.mp4"
     print(f"📽️ 开始处理视频: {video_path}", flush=True)
 
     output_path = make_smart_keyframe_grid(
