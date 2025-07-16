@@ -664,8 +664,8 @@ async def process_one_grid_job():
 
     await db.execute(
         """
-        INSERT INTO sora_content (source_id, thumb_file_unique_id, stage)
-        VALUES (%s, %s, 'pending')
+        INSERT INTO sora_content (source_id, thumb_file_unique_id, file_type, stage)
+        VALUES (%s, %s, 'v', 'pending')
         ON DUPLICATE KEY UPDATE
             thumb_file_unique_id = VALUES(thumb_file_unique_id),
             stage = 'pending'
