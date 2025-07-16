@@ -16,6 +16,11 @@ from pathlib import Path
 def extract_frame_at(video_path, timestamp):
     try:
         clip = VideoFileClip(video_path)
+        duration = clip.duration
+        if timestamp > duration:
+            print(f"⚠️ 跳过无效时间点 {timestamp:.2f}s > duration {duration:.2f}s", flush=True)
+            return None
+
         frame = clip.get_frame(timestamp)
         clip.reader.close()
         if clip.audio:
@@ -25,12 +30,14 @@ def extract_frame_at(video_path, timestamp):
         print(f"⚠️ 抽帧异常 @ {timestamp:.2f}s: {e}", flush=True)
         return None
 
+
 def detect_faces(image, app):
     img_np = np.array(image)
     faces = app.get(img_np)
     return faces
 
 def extract_valid_frames_worker(video_path, timestamps, queue):
+    results = []  # ✅ 提前定义，避免 except 中未定义
     try:
         app = FaceAnalysis(name="buffalo_l", providers=["CPUExecutionProvider"])
         app.prepare(ctx_id=0, det_size=(640, 640))
@@ -66,14 +73,22 @@ def safe_extract_valid_frames(video_path, max_frames=60, timeout=600):
     p.join(timeout)
 
     if p.is_alive():
-        print("❌ 超过整体 60 秒限制，强制退出抽帧任务", flush=True)
+        print("❌ 超过整体超时限制，强制退出抽帧任务", flush=True)
         p.terminate()
         p.join()
         return []
 
-    results = queue.get()
-    print(f"🎞️ 成功提取 {len(results)} 张有效画面（耗时 {timeout:.1f}s）", flush=True)
-    return results
+    if queue.empty():
+        print("❌ 子进程没有返回结果，可能崩溃了", flush=True)
+        return []
+
+    try:
+        results = queue.get(timeout=5)
+        print(f"🎞️ 成功提取 {len(results)} 张有效画面（耗时 {timeout:.1f}s）", flush=True)
+        return results
+    except Exception as e:
+        print(f"❌ 获取子进程结果失败: {e}", flush=True)
+        return []
 
 def cluster_faces(faces):
     embeddings = [f.embedding for f in faces]
@@ -103,7 +118,7 @@ def make_smart_keyframe_grid(video_path, output_dir="output", max_frames=60, det
 
     if not valid_frames:
         print("❌ 无有效帧，终止处理", flush=True)
-        return None
+        # return None
 
     all_faces = []
     for t, img, faces in valid_frames:
@@ -134,13 +149,13 @@ def make_smart_keyframe_grid(video_path, output_dir="output", max_frames=60, det
     return out_path
 
 if __name__ == "__main__":
-    video_path = sys.argv[1] if len(sys.argv) > 1 else "video_2025-07-13_03-07-40.mp4"
+    video_path = sys.argv[1] if len(sys.argv) > 1 else "video/video_2025-07-17_05-57-47.mp4"
     print(f"📽️ 开始处理视频: {video_path}", flush=True)
 
     output_path = make_smart_keyframe_grid(
         video_path,
         output_dir="preview_outputs",
-        max_frames=80,
+        max_frames=10,
         detect_faces=True
     )
 

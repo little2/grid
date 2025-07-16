@@ -7,6 +7,8 @@ __pycache__
 .gitignore
 venv311_rebuild/*
 venv/*
+video/*
+preview_outputs/*
 venv/bin/activate.csh
 video.mp4
 video2.mp4
@@ -14,3 +16,5 @@ video3.MP4
 video4.mp4
 video5.mp4
 preview_demo.jpg
+.DS_Store
+
