@@ -149,7 +149,7 @@ def make_smart_keyframe_grid(video_path, output_dir="output", max_frames=60, det
     return out_path
 
 if __name__ == "__main__":
-    video_path = sys.argv[1] if len(sys.argv) > 1 else "video/video_2025-07-17_05-57-47.mp4"
+    video_path = sys.argv[1] if len(sys.argv) > 1 else "video/Luba, Sanya & Sasha Blowjob vid.mkv"
     print(f"📽️ 开始处理视频: {video_path}", flush=True)
 
     output_path = make_smart_keyframe_grid(
