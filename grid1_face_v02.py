@@ -208,7 +208,7 @@ def make_hero_grid_3x4(
 
 
 if __name__ == "__main__":
-    video_path = "video/video_2025-08-09_15-15-33.mp4"
+    video_path = "video/【91】最新偷拍超极品正太洗澡、很调皮被发现了还撸硬给你看，又大又翘.mp4"
     preview_basename = "previews/preview_209551"
     try:
         meta = make_hero_grid_3x4(video_path, preview_basename)

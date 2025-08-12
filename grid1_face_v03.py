@@ -298,8 +298,8 @@ def make_hero_grid_3x4(
 
 
 if __name__ == "__main__":
-    video_path = "video/video_2025-08-09_15-15-33.mp4"
-    preview_basename = "previews/preview_209551"
+    video_path = "video/C182弟弟厕所偷拍系列240.mp4"
+    preview_basename = "previews/preview_387649"
     try:
         meta = make_hero_grid_3x4(video_path, preview_basename)
         print("✅ 网格已生成：", meta["output_path"])
