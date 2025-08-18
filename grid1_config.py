@@ -752,8 +752,8 @@ if __name__ == "__main__":
             # 注意：sample_count 过大可能导致内存占用过高，建议不超过 180
             #       num_aux 过大可能导致辅助图过多，建议不超过 12
             meta = make_hero_grid_adaptive(
-                video_path="video/2个可爱男孩.mp4",
-                preview_basename="previews/387629",
+                video_path="video/video_2025-08-17_23-31-15.mp4",
+                preview_basename="previews/29763",
                 # manual_times=["1:15"],        # 可选
                 # 也可以手动覆盖：
                 # sample_count=180,

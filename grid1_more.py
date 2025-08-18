@@ -51,13 +51,13 @@ def _decide_layout_by_duration(duration_sec: float) -> dict:
     """
     m = duration_sec / 60.0
     if m < 5:
-        return {"cols": 3, "rows": 4, "num_aux": 8,  "sample_count": 10}
+        return {"cols": 3, "rows": 4, "num_aux": 8,  "sample_count": 100}
     elif m < 10:
-        return {"cols": 4, "rows": 4, "num_aux": 12, "sample_count": 20}
+        return {"cols": 4, "rows": 4, "num_aux": 12, "sample_count": 150}
     elif m < 30:
-        return {"cols": 5, "rows": 5, "num_aux": 21, "sample_count": 30}
+        return {"cols": 5, "rows": 5, "num_aux": 21, "sample_count": 200}
     else:
-        return {"cols": 6, "rows": 6, "num_aux": 32, "sample_count": 40}
+        return {"cols": 6, "rows": 6, "num_aux": 32, "sample_count": 300}
 
 
 def _fmt_eta(elapsed, done, total):
@@ -721,8 +721,8 @@ if __name__ == "__main__":
     try:
         
         meta = make_hero_grid_adaptive(
-            video_path="video/【幼齿-0605】2个可爱男孩换衣服被偷拍.mp4",
-            preview_basename="previews/387629",
+            video_path="video/【猫】系列 (16).mp4",
+            preview_basename="previews/47308",
             # manual_times=["1:15"],        # 可选
             # 也可以手动覆盖：
             # sample_count=180,
