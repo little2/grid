@@ -721,8 +721,8 @@ if __name__ == "__main__":
     try:
         
         meta = make_hero_grid_adaptive(
-            video_path="video/video_2025-08-20_08-13-14.mp4",
-            preview_basename="previews/390463",
+            video_path="video/video_2025-08-20_23-58-38.mp4",
+            preview_basename="previews/287983",
             manual_times=["0:04"],        # 可选
             # 也可以手动覆盖：
             # sample_count=180,
