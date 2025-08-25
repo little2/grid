@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import List, Tuple, Dict, Any
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
-from moviepy.editor import VideoFileClip
+from moviepy import VideoFileClip
 import imagehash
 from insightface.app import FaceAnalysis
 from datetime import datetime
@@ -721,13 +721,14 @@ if __name__ == "__main__":
     try:
         
         meta = make_hero_grid_adaptive(
-            video_path="video/video_2025-08-20_23-58-38.mp4",
-            preview_basename="previews/287983",
-            manual_times=["0:04"],        # 可选
+            video_path="video/s6614244fe4b06d7f37acee3b.mp4",
+            preview_basename="previews/370854",
+            manual_times=["01:34","04:08","04:37","05:11","08:33"],        # 可选
             # 也可以手动覆盖：
             # sample_count=180,
             # num_aux=12,
         )
+
 
 
 
