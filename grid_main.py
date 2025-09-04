@@ -29,7 +29,9 @@ from moviepy import VideoFileClip
 
 from grid_db import MySQLManager
 
+
 from utils.hero_grid_video import HeroGridVideo
+
 
 # =========================
 # 基础配置 & 全局对象pytho
@@ -52,6 +54,7 @@ except Exception as e:
 
 # 环境变量兜底
 BOT_TOKEN = CONFIG.get("bot_token", os.getenv("BOT_TOKEN"))
+
 API_ID = int(CONFIG.get("api_id", os.getenv("API_ID", 0)))
 API_HASH = CONFIG.get("api_hash", os.getenv("API_HASH", ""))
 TELEGROUP_THUMB = int(CONFIG.get("telegroup_thumb", os.getenv("TELEGROUP_THUMB", 0)))
@@ -61,6 +64,7 @@ TELEGROUP_RELY_BOT = int(CONFIG.get("telegroup_rely_bot", os.getenv("TELEGROUP_R
 if not BOT_TOKEN:
     raise RuntimeError("缺少 BOT_TOKEN")
 
+    
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 tele_client = TelegramClient(StringSession(), API_ID, API_HASH)
 
@@ -134,27 +138,47 @@ async def download_with_resume(msg, save_path: str, chunk_size: int = 128 * 1024
     print()
     log.info("✔️ 下载完成: %s", save_path)
 
+from telethon.errors import FloodWaitError, FileMigrateError, AuthKeyUnregisteredError
+
 async def safe_download(msg, save_path: str, try_resume: bool = True) -> None:
+    """
+    优先断点续传；若遇到 DC 迁移 / 授权问题，退回到 Telethon 自带的 download_media。
+    """
     doc = getattr(getattr(msg, "media", None), "document", None)
     if not doc or not getattr(doc, "file_reference", None):
         log.warning("file_reference 缺失或非文档类型，使用 download_media 兜底")
-        await msg.download_media(file=save_path)
+        await tele_client.download_media(msg, file=save_path)  # ✅ 用 client 方法
         return
 
     if not try_resume:
         log.info("⏬ 禁用续传，直接 download_media")
-        await msg.download_media(file=save_path)
+        await tele_client.download_media(msg, file=save_path)
         return
 
     try:
+        # 首选：断点续传（低层 API）
         await download_with_resume(msg, save_path)
+        return
     except FileMigrateError as e:
-        log.info("🌐 DC 迁移提示：文件在 DC%s，尝试切换…", e.new_dc)
-        await tele_client._switch_dc(e.new_dc)  # Telethon 内部方法，必要时可替换为重新获取消息后的正常下载
-        await download_with_resume(msg, save_path)
+        # ✅ 不再 _switch_dc；直接走 Telethon 内建下载（会自动处理 DC）
+        log.info("🌐 DC 迁移提示：%s，改用 download_media 兜底", e)
+        await tele_client.download_media(msg, file=save_path)
+        return
+    except AuthKeyUnregisteredError as e:
+        # ✅ 尝试重连后直接走 download_media
+        log.warning("AuthKey 失效，尝试重连后回退 download_media：%s", e)
+        try:
+            await tele_client.disconnect()
+        except Exception:
+            pass
+        await start_telethon()
+        await tele_client.download_media(msg, file=save_path)
+        return
     except Exception as e:
         log.warning("续传失败，fallback download_media：%s", e)
-        await msg.download_media(file=save_path)
+        await tele_client.download_media(msg, file=save_path)
+        return
+
 
 async def download_from_file_id(file_id: str, save_path: str, chat_id: int, message_id: int) -> bool:
     await start_telethon()
@@ -294,6 +318,7 @@ async def handle_video(message: Message) -> None:
                     return
                 else:
                     log.info("缩图已存在，但在其它 BOT，略过")
+                    # message.delete()
                     return
         else:
             log.info("缩图记录存在，但未在 file_extension 找到实体，准备重建")
@@ -356,7 +381,7 @@ async def handle_document(message: Message) -> None:
 # =========================
 async def get_last_update_id() -> int:
     await db.init()
-    row = await db.fetchone("SELECT message_id FROM scrap_progress WHERE api_id=%s AND chat_id=0", (API_ID,))
+    row = await db.fetchone("SELECT message_id FROM scrap_progress WHERE api_id=%s AND chat_id=0", (BOT_ID,))
     return int(row[0]) if row else 0
 
 async def update_scrap_progress(new_update_id: int) -> None:
@@ -368,12 +393,12 @@ async def update_scrap_progress(new_update_id: int) -> None:
             message_id=VALUES(message_id),
             update_datetime=NOW()
         """,
-        (API_ID, new_update_id),
+        (BOT_ID, new_update_id),
     )
 
 async def limited_polling() -> None:
     global current_job_id
-    last_update_id = await get_last_update_id()
+    last_update_id = await get_last_update_id() #update_id 只保证对某个 Bot 唯一，不同 Bot 的更新是各自独立的。
     log.info("📥 Polling from offset=%s", last_update_id + 1)
 
     while not shutdown_event.is_set():
@@ -447,7 +472,7 @@ async def fetch_next_pending_job(db: MySQLManager, bot_name: str) -> Optional[Tu
     #     (bot_name,),
     # )
 
-    row = await db.fetchone("SELECT id, file_id, file_unique_id, source_chat_id, source_message_id  FROM `grid_jobs` WHERE `file_unique_id` LIKE 'AgADkwIAAmoE8Ec'")
+    row = await db.fetchone("SELECT id, file_id, file_unique_id, source_chat_id, source_message_id  FROM `grid_jobs` WHERE `file_unique_id` LIKE 'AgADEwkAApOFkVQ'")
 
 
 
@@ -479,7 +504,7 @@ async def process_one_grid_job() -> None:
     job_id, file_id, file_unique_id, chat_id, message_id = job
     current_job_id = job_id
     log.info("✅ (1) Processing job ID=%s", job_id)
-    update_job_status(db,job_state='processing', error_message='', job_id=job_id)
+    await update_job_status(db,job_state='processing', error_message='', job_id=job_id)
 
 
     # 1) 下载视频
@@ -488,7 +513,7 @@ async def process_one_grid_job() -> None:
         log.info("(2) 📥 开始下载视频: %s", video_path)
         await download_from_file_id(file_id, video_path, chat_id, message_id)
     except Exception as e:
-        update_job_status(db,job_state='failed', error_message='下载视频失败', job_id=job_id)
+        await update_job_status(db,job_state='failed', error_message='下载视频失败', job_id=job_id)
         log.exception("❌ 下载视频失败: %s (%s / %s)", e, file_unique_id, file_id)
         # 继续处理后续任务
         return
@@ -497,8 +522,11 @@ async def process_one_grid_job() -> None:
 
     # 2) 生成预览图
     try:
-        preview_basename = str(TEMP_DIR / f"preview_{file_unique_id}")
+        preview_basename = str(TEMP_DIR / f"{file_unique_id}")
         log.info("(3) 生成关键帧网格…")
+
+       
+
 
         hg = HeroGridVideo(font_path="fonts/Roboto_Condensed-Regular.ttf",
                         providers=["CPUExecutionProvider"],  # 或按需改为 GPU
@@ -530,7 +558,8 @@ async def process_one_grid_job() -> None:
         return
 
 
-
+    shutdown_event.set()
+    return
 
 
     # 3) 计算 pHash + 发送图片（RELY 备份 + 原聊天回复）

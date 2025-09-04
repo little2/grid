@@ -62,7 +62,8 @@ class HeroGridVideo:
         """
         生成网格图并返回元数据（输出路径、主图时间、辅助帧时间等）
         """
-        ts_prefix = datetime.now().strftime("%Y%m%d%H%M%S_")
+        ts_prefix = ''
+        # ts_prefix = datetime.now().strftime("%Y%m%d%H%M%S_")
         out_dir = Path(preview_basename).parent
         base_name = Path(preview_basename).name
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -451,7 +452,7 @@ class HeroGridVideo:
         self._stage(f"精修完成：新主图时间 {meta['time']:.3f}s，综合分 {meta['score']:.2f} | 总扫 {cnt_scanned}，有脸 {cnt_has_face}，小脸过滤 {cnt_filtered_small}")
         return best[2], meta
 
-    def _extract_diverse_frames(
+    def _extract_diverse_frames2(
         self,
         clip: VideoFileClip,
         num_frames: int,
@@ -536,6 +537,144 @@ class HeroGridVideo:
 
         self._stage(f"辅助帧完成：实际选取 {len(selected)} 张")
         return selected
+
+
+    def _extract_diverse_frames(
+        self,
+        clip: VideoFileClip,
+        num_frames: int,
+        extra: int = 6,
+        exclude_hashes: Optional[List[imagehash.ImageHash]] = None,
+        exclude_thr: int = 6,
+    ) -> List[Tuple[float, Image.Image]]:
+        """
+        从视频中均匀抽样（num_frames + extra），用感知哈希贪心选取多样帧。
+        必达目标数：不足时逐步放宽，最后用均匀采样回填，确保返回长度 == num_frames。
+        """
+        self._stage(f"开始抽辅助帧：目标 {num_frames}，候选 {num_frames + extra}")
+
+        duration = max(float(clip.duration or 0.01), 0.01)
+        # 第一轮候选时间（均匀取样，不含末尾端点，减少黑帧/转场干扰）
+        times = np.linspace(0.0, duration, num_frames + extra, endpoint=False, dtype=np.float64)
+
+        raw_frames: List[Tuple[float, Image.Image]] = []
+        start_ts = time.time()
+        for k, t in enumerate(times, start=1):
+            try:
+                img = Image.fromarray(clip.get_frame(float(t)))
+                raw_frames.append((float(t), img))
+            except Exception:
+                pass
+            self._progress("多样性筛选", k, len(times), start_ts, every=10)
+
+        # 若完全抓不到帧，尝试 0 秒兜底
+        if not raw_frames:
+            try:
+                return [(0.0, Image.fromarray(clip.get_frame(0.0)))] * max(1, num_frames)
+            except Exception:
+                return []
+
+        # 预计算哈希
+        hashes: List[imagehash.ImageHash] = [imagehash.dhash(img) for _, img in raw_frames]
+
+        # 计算候选帧之间的距离用于自适应阈值
+        dists = []
+        for i in range(len(hashes)):
+            hi = hashes[i]
+            for j in range(i + 1, len(hashes)):
+                dists.append(abs(hi - hashes[j]))
+        adaptive_thr = max(5, int(np.percentile(dists, 25))) if dists else 6
+
+        # -----------------------
+        # Pass 1：严格多样性选取
+        # -----------------------
+        def greedy_select(thr: int) -> List[Tuple[float, Image.Image]]:
+            selected: List[Tuple[float, Image.Image]] = []
+            selected_hashes: List[imagehash.ImageHash] = []
+            for (t, img), h in zip(raw_frames, hashes):
+                # 排除与指定哈希过近的帧（通常是主图等）
+                if exclude_hashes and any(abs(h - eh) < exclude_thr for eh in exclude_hashes):
+                    continue
+                # 与已选过近则跳过
+                if selected_hashes and any(abs(h - sh) < thr for sh in selected_hashes):
+                    continue
+                selected.append((t, img))
+                selected_hashes.append(h)
+                if len(selected) >= num_frames:
+                    break
+            return selected
+
+        selected = greedy_select(adaptive_thr)
+        if len(selected) < num_frames:
+            # -----------------------
+            # Pass 2：放宽多样性阈值
+            # -----------------------
+            loose_thr = max(3, adaptive_thr - 2)
+            selected = greedy_select(loose_thr)
+
+        if len(selected) < num_frames:
+            # -----------------------
+            # Pass 3：无差别补齐（仅避开 exclude_hashes）
+            # -----------------------
+            picked = set(id(img) for _, img in selected)
+            for (t, img), h in zip(raw_frames, hashes):
+                if len(selected) >= num_frames:
+                    break
+                if id(img) in picked:
+                    continue
+                if exclude_hashes and any(abs(h - eh) < exclude_thr for eh in exclude_hashes):
+                    continue
+                selected.append((t, img))
+                picked.add(id(img))
+
+        if len(selected) < num_frames:
+            # -----------------------
+            # Pass 4：均匀采样回填（避免已选时间点）
+            # -----------------------
+            want = num_frames - len(selected)
+            # 生成二轮均匀时间（错位一点点，避开与第一轮完全重复）
+            times2 = np.linspace(0.0 + duration/(2*(num_frames+extra)), duration, want * 2, endpoint=False, dtype=np.float64)
+            already_times = {round(t, 3) for t, _ in selected}
+            filled = 0
+            for t in times2:
+                if filled >= want:
+                    break
+                t_ = float(np.clip(t, 0.0, max(duration - 1e-3, 0.0)))
+                if round(t_, 3) in already_times:
+                    continue
+                img = self._safe_get_frame(clip, t_)
+                if img is None:
+                    continue
+                h = imagehash.dhash(img)
+                if exclude_hashes and any(abs(h - eh) < exclude_thr for eh in exclude_hashes):
+                    continue
+                selected.append((t_, img))
+                already_times.add(round(t_, 3))
+                filled += 1
+
+        if len(selected) < num_frames:
+            # -----------------------
+            # Pass 5：极端兜底（允许重复最后一帧填满）
+            # -----------------------
+            if selected:
+                last_t, last_img = selected[-1]
+                while len(selected) < num_frames:
+                    selected.append((last_t, last_img))
+            else:
+                # 理论上不会到这里
+                try:
+                    img0 = Image.fromarray(clip.get_frame(0.0))
+                    selected = [(0.0, img0)] * num_frames
+                except Exception:
+                    selected = []
+
+        # 规范化输出（按时间排序，截断到目标数）
+        selected.sort(key=lambda x: x[0])
+        selected = selected[:num_frames]
+
+        self._stage(f"辅助帧完成：实际选取 {len(selected)} / 目标 {num_frames}")
+        return selected
+
 
     # =========================
     # 内部：黑边检测
