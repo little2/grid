@@ -29,7 +29,7 @@ from moviepy import VideoFileClip
 
 from grid_db import MySQLManager
 
-from utils.hero_grid_video import HeroGridGenerator
+from utils.hero_grid_video import HeroGridVideo
 
 # =========================
 # 基础配置 & 全局对象pytho
@@ -447,7 +447,7 @@ async def fetch_next_pending_job(db: MySQLManager, bot_name: str) -> Optional[Tu
     #     (bot_name,),
     # )
 
-    row = await db.fetchone("SELECT id, file_id, file_unique_id, source_chat_id, source_message_id  FROM `grid_jobs` WHERE `file_unique_id` LIKE 'AgADoAQAApidSEU'")
+    row = await db.fetchone("SELECT id, file_id, file_unique_id, source_chat_id, source_message_id  FROM `grid_jobs` WHERE `file_unique_id` LIKE 'AgADkwIAAmoE8Ec'")
 
 
 
@@ -500,14 +500,21 @@ async def process_one_grid_job() -> None:
         preview_basename = str(TEMP_DIR / f"preview_{file_unique_id}")
         log.info("(3) 生成关键帧网格…")
 
-        hg = HeroGridGenerator(font_path="fonts/Roboto_Condensed-Regular.ttf")
+        hg = HeroGridVideo(font_path="fonts/Roboto_Condensed-Regular.ttf",
+                        providers=["CPUExecutionProvider"],  # 或按需改为 GPU
+                        det_size=(640, 640),
+                        verbose=True)
+
+
         meta = hg.generate(
             video_path=video_path,
             preview_basename=preview_basename,
-            # manual_times=["01:34","04:08","04:37","05:11","08:33"],
+            # manual_times=["07:13"],
             # sample_count=180,
             # num_aux=12,
         )
+
+
         print("✅ 网格已生成：", meta["output_path"])
         print("   主角帧时间(s)：", meta["hero_time"], " 评分：", meta["hero_score"])
         print("   辅助帧时间(s)：", meta["aux_times"])
@@ -523,8 +530,7 @@ async def process_one_grid_job() -> None:
         return
 
 
-    shutdown_event.set()
-    return
+
 
 
     # 3) 计算 pHash + 发送图片（RELY 备份 + 原聊天回复）
