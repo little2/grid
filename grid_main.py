@@ -460,7 +460,7 @@ async def fetch_next_pending_job(db: MySQLManager, bot_name: str) -> Optional[Tu
     返回: (id, file_id, file_unique_id, source_chat_id, source_message_id)
     若无任务则返回 None
     """
-   
+    
     row = await db.fetchone(
         """
         SELECT id, file_id, file_unique_id, source_chat_id, source_message_id
