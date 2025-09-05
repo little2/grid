@@ -534,7 +534,7 @@ async def process_one_grid_job() -> None:
 
     # 2) 生成预览图
     try:
-        preview_basename = str(TEMP_DIR / f"{content_id}")
+        preview_basename = str(TEMP_DIR / f"{content_id}_{file_unique_id}")
         log.info("(3) 生成关键帧网格…")
 
        
@@ -549,7 +549,7 @@ async def process_one_grid_job() -> None:
         meta = hg.generate(
             video_path=video_path,
             preview_basename=preview_basename,
-            # manual_times=["07:13"],
+            # manual_times=["00:10","00:54"],
             # sample_count=180,
             # num_aux=12,
         )

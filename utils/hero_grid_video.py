@@ -101,8 +101,8 @@ class HeroGridVideo:
             refined_img, refined_meta = self._refine_hero_nearby(
                 clip,
                 hero_time=hero_meta.get("time", 0.0),
-                window=0.1,
-                step=0.1,
+                window=3,
+                step=0.3,
                 min_face_area=1e-4,
             )
             if refined_img is not None:
@@ -845,7 +845,7 @@ if __name__ == "__main__":
         meta = hg.generate(
             video_path="video/s6614244fe4b06d7f37acee3b.mp4",
             preview_basename="previews/370854",
-            manual_times=["01:34", "04:08", "04:37", "05:11", "08:33"],
+            # manual_times=["01:34", "04:08", "04:37", "05:11", "08:33"],
             # sample_count=180,
             # num_aux=12,
         )
