@@ -1,31 +1,34 @@
-# Telegram Bot 框架
-aiogram==3.20.0.post0
+# ===================
+# 项目依赖清单
+# 自动生成时间: 2025-09-05
+# ===================
 
-# 异步 HTTP 客户端 (AIogram 内部依赖，用于 Webhook 等)
-aiohttp>=3.8.1
-
-# MySQL 异步连接池
-aiomysql>=0.0.23
-
-# 环境变量读取
-
+# 核心工具
 python-dotenv==1.1.1
-# Telegram 文件上传/下载
-telethon>=1.27.0
+
+# Telegram Bot 框架 (异步)
+aiogram==3.20.0.post0
+aiohttp>=3.8.1  # aiogram 内部依赖，支持 Webhook 和会话
+
+# Telegram 媒体文件处理（低级 API）
+telethon>=1.38.0
+
+# 数据库支持
+aiomysql>=0.0.23  # 异步 MySQL 驱动
+PyMySQL>=1.0.0    # 同步驱动（兼容性备用或用于非异步场景）
+# 可选 ORM
+SQLAlchemy>=2.0.0 ; extra == "db"
 
 # 视频处理
 moviepy>=2.2.1
 
-# 图像处理
+# 图像与数值处理
 Pillow>=9.5.0
-
-# 感知哈希
-ImageHash>=4.3.1
-
-# 数值运算（ImageHash 的依赖，可选显式声明）
+imagehash>=4.3.1
 numpy>=1.25.0
 
-
-insightface
-onnxruntime
-onnx
+# 人脸识别（insightface）
+insightface>=0.7.0
+onnx>=1.15.0
+onnxruntime>=1.15.0 ; platform_system != "Darwin"
+onnxruntime-coreml>=1.15.0 ; platform_system == "Darwin"  # macOS 加速支持
