@@ -461,18 +461,18 @@ async def fetch_next_pending_job(db: MySQLManager, bot_name: str) -> Optional[Tu
     若无任务则返回 None
     """
    
-    # row = await db.fetchone(
-    #     """
-    #     SELECT id, file_id, file_unique_id, source_chat_id, source_message_id
-    #     FROM grid_jobs
-    #     WHERE job_state='pending' AND bot_name=%s
-    #     ORDER BY scheduled_at ASC, id ASC
-    #     LIMIT 1
-    #     """,
-    #     (bot_name,),
-    # )
+    row = await db.fetchone(
+        """
+        SELECT id, file_id, file_unique_id, source_chat_id, source_message_id
+        FROM grid_jobs
+        WHERE job_state='pending' AND bot_name=%s
+        ORDER BY scheduled_at ASC, id ASC
+        LIMIT 1
+        """,
+        (bot_name,),
+    )
 
-    row = await db.fetchone("SELECT id, file_id, file_unique_id, source_chat_id, source_message_id  FROM `grid_jobs` WHERE `file_unique_id` LIKE 'AgADEwkAApOFkVQ'")
+    # row = await db.fetchone("SELECT id, file_id, file_unique_id, source_chat_id, source_message_id  FROM `grid_jobs` WHERE `file_unique_id` LIKE 'AgADawMAAnaPgEc'")
 
 
 
@@ -503,12 +503,24 @@ async def process_one_grid_job() -> None:
 
     job_id, file_id, file_unique_id, chat_id, message_id = job
     current_job_id = job_id
+
+    thumb_row = await db.fetchone(
+        "SELECT id FROM sora_content WHERE source_id=%s",
+        (file_unique_id,),
+    )
+    if thumb_row and thumb_row[0]:
+        print(f"Found sora_content: {thumb_row}")
+        content_id = int(thumb_row[0])
+        log.info("content_id = %s", content_id)
+        
+
+
     log.info("✅ (1) Processing job ID=%s", job_id)
     await update_job_status(db,job_state='processing', error_message='', job_id=job_id)
 
 
     # 1) 下载视频
-    video_path = str(TEMP_DIR / f"{file_unique_id}.mp4")
+    video_path = str(TEMP_DIR / f"{content_id}_{file_unique_id}.mp4")
     try:
         log.info("(2) 📥 开始下载视频: %s", video_path)
         await download_from_file_id(file_id, video_path, chat_id, message_id)
@@ -522,7 +534,7 @@ async def process_one_grid_job() -> None:
 
     # 2) 生成预览图
     try:
-        preview_basename = str(TEMP_DIR / f"{file_unique_id}")
+        preview_basename = str(TEMP_DIR / f"{content_id}")
         log.info("(3) 生成关键帧网格…")
 
        
@@ -556,11 +568,6 @@ async def process_one_grid_job() -> None:
         log.exception("❌ 生成预览图失败：%s", e)
         shutdown_event.set()
         return
-
-
-    shutdown_event.set()
-    return
-
 
     # 3) 计算 pHash + 发送图片（RELY 备份 + 原聊天回复）
     phash_str = None
@@ -665,6 +672,15 @@ async def process_one_grid_job() -> None:
             stage = 'pending'
         """,
         (file_unique_id, photo_unique_id),
+    )
+
+
+
+    await db.execute(
+        """
+        UPDATE sora_media SET thumb_file_id = NULL WHERE  content_id = %s 
+        """,
+        (content_id),
     )
 
     log.info("(5) ✔️ 预览图入库完毕: %s %s", photo_file_id, photo_unique_id)
