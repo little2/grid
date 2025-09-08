@@ -7,11 +7,13 @@ extractor = ArchiveExtractor(common_passwords={
     "p2": "password",
     "tpv": "tpv",
     "y2024": "2024",
+    "000":"000"
 })
 
-# res = extractor.extract("video/超诱人大屁股校服白袜小正太,屁股原有大鸡鸡好嫩.zip", password=None, prefer_pwd_key="tpv")
+# res = extractor.extract("video/小峰.zip", password="000", prefer_pwd_key="tpv")
 # folder_url = res.get('out_dir')
-folder_url = "video/20250824_225511"
+
+folder_url = "video/20250908_232148/═╝╞¼"
 
 gen = AlbumPreviewGenerator(tile_size=256, bottom_strip=30)
 info = gen.generate_preview(folder_url, out_path="out_preview.jpg")
