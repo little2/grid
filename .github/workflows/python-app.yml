@@ -1,8 +1,8 @@
 name: Deploy Grid
 
 on: 
-  schedule:
-    - cron: '* */1 * * *'  
+  # schedule:
+  #   - cron: '* */1 * * *'  
   push: 
     branches: 
       - master  # 当推送到 master 分支时触发
