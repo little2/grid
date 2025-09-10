@@ -28,11 +28,21 @@ import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
+try:
+    from pillow_heif import register_heif_opener
+    register_heif_opener()  # 让 Pillow 能直接打开 .heic/.heif
+except Exception:
+    # 没装也不报错；如果目录含 heic 而未安装，会走 OpenCV 分支并失败 -> 返回 None 被跳过
+    pass
 
 class AlbumPreviewGenerator:
     # ===== 默认配置 =====
-    IMG_EXTS = {'.jpg', '.jpeg', '.png', '.bmp', '.webp'}
+    IMG_EXTS = {'.jpg', '.jpeg', '.png', '.bmp', '.webp', '.heic', '.heif'}
     VID_EXTS = {'.mp4', '.mov', '.avi', '.mkv', '.m4v', '.webm', '.ts'}
+
+
+ 
+
 
     def __init__(
         self,
@@ -45,6 +55,7 @@ class AlbumPreviewGenerator:
         watermark_text: Optional[str] = None,  # 若为 None，则自动写入“各类型文件数量”
         font_path: Optional[str] = None,
         font_size: int = 16,
+        recursive: bool = True, max_images: int | None = None, max_videos: int | None = None,
     ):
         self.TILE = tile_size
         self.BOTTOM_STRIP = bottom_strip
@@ -54,7 +65,10 @@ class AlbumPreviewGenerator:
         self.watermark_text = watermark_text
         self.font_path = font_path
         self.font_size = font_size
-
+        self.recursive = recursive
+        self.max_images = max_images
+        self.max_videos = max_videos
+        
         if haar_face_path is None:
             haar_face_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
         self.face_cascade = cv2.CascadeClassifier(haar_face_path)
@@ -112,6 +126,39 @@ class AlbumPreviewGenerator:
         M = total_files // 2
         N_max, col, row = self.max_grid_from_limit(M)
         return M, N_max, col, row
+
+
+    def _read_image_bgr(self, p: Path) -> Optional[np.ndarray]:
+        # 先试 Pillow（支持 HEIC）
+        try:
+            pil_img = Image.open(str(p))
+            pil_img.load()
+            # 转成 RGB ndarray，再转 BGR 以匹配 OpenCV 习惯
+            arr = np.array(pil_img.convert("RGB"))
+            return cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
+        except Exception:
+            pass
+        # 退回 OpenCV（jpg/png/webp等常见格式OK）
+        try:
+            data = cv2.imdecode(np.fromfile(str(p), dtype=np.uint8), cv2.IMREAD_COLOR)
+            return data
+        except Exception:
+            return None
+
+
+    def _iter_files(self, folder: Path):
+        if self.recursive:
+            for root, _, files in os.walk(folder):
+                for fn in files:
+                    # 跳过隐藏/系统文件
+                    if fn.startswith('.'):
+                        continue
+                    yield Path(root) / fn
+        else:
+            for p in folder.iterdir():
+                if p.is_file():
+                    yield p
+
 
     # ======== Public API ========
     def generate_preview(
@@ -290,9 +337,7 @@ class AlbumPreviewGenerator:
 
     def _load_candidates(self, folder: Path) -> Tuple[List["_Candidate"], int, int, int]:
         images, videos, others = [], [], []
-        for p in sorted(folder.iterdir()):
-            if not p.is_file():
-                continue
+        for p in sorted(self._iter_files(folder)):
             if self._is_image(p):
                 images.append(p)
             elif self._is_video(p):
@@ -300,11 +345,17 @@ class AlbumPreviewGenerator:
             else:
                 others.append(p)
 
+        # 可选：限制最大处理量，避免超大目录卡顿
+        if self.max_images is not None:
+            images = images[: self.max_images]
+        if self.max_videos is not None:
+            videos = videos[: self.max_videos]
+
         candidates: List[AlbumPreviewGenerator._Candidate] = []
 
         # 图片
         for p in images:
-            data = cv2.imdecode(np.fromfile(str(p), dtype=np.uint8), cv2.IMREAD_COLOR)
+            data = self._read_image_bgr(p)
             if data is None:
                 continue
             thumb = self._center_crop_square(data, self.TILE)
@@ -324,6 +375,7 @@ class AlbumPreviewGenerator:
             candidates.append(c)
 
         return candidates, len(images), len(videos), len(others)
+        
 
     # ======== Internal: 选择逻辑 ========
     def _hero_score(self, c: "_Candidate") -> float:
