@@ -219,9 +219,10 @@ def add_watermark_with_audio_check(
 
 # ===== 示例：随机闪现模式 =====
 if __name__ == "__main__":
+    file_name = "AnimateDiff_00100.mp4"
     add_watermark_with_audio_check(
-        "./video/ComfyUI_00103_.mp4",
-        "ComfyUI_00103_.mp4",
+        f"./video/{file_name}",
+        f"./watermark/w_{file_name}",
         font_path="fonts/msyh.ttc",
         font_size=11,
         safe_margin=10,
