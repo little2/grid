@@ -88,6 +88,45 @@ current_job_id: Optional[int] = None
 BOT_NAME: Optional[str] = None
 BOT_ID: Optional[int] = None
 
+# 放在 safe_download 上方
+import time, math, os
+def make_dl_progress_logger(tag: str = ""):
+    start = time.time()
+    last_t = 0.0
+    last_b = 0
+    def _cb(received: int, total: int):
+        nonlocal last_t, last_b
+        now = time.time()
+        # 限频：0.5s 刷新一次，避免刷屏
+        if now - last_t < 0.5:
+            return
+        last_t = now
+        pct = (received / total * 100) if total else 0.0
+        speed = (received - last_b) / max(now - start, 1e-6)  # B/s (近似)
+        last_b = received
+        # 估算 ETA
+        remain = max(total - received, 0)
+        eta = remain / max(speed, 1e-6)
+        # 人类友好显示
+        def _fmt_bytes(x):
+            for unit in ["B","KB","MB","GB","TB"]:
+                if x < 1024 or unit == "TB":
+                    return f"{x:.2f} {unit}"
+                x /= 1024
+        def _fmt_time(s):
+            m, s = divmod(int(s), 60); h, m = divmod(m, 60)
+            return f"{h:02d}:{m:02d}:{s:02d}"
+        msg = (f"📥 {tag} {received}/{total} "
+               f"({pct:.1f}%) • {_fmt_bytes(speed)}/s • ETA {_fmt_time(eta)}")
+        # 同时打印到 stdout 与日志
+        print("\r" + msg, end="", flush=True)
+        # try:
+        #     log.info(msg)
+        # except Exception:
+        #     pass
+    return _cb
+
+
 
 # =========================
 # Telethon 启动与下载工具
@@ -147,12 +186,20 @@ async def safe_download(msg, save_path: str, try_resume: bool = True) -> None:
     doc = getattr(getattr(msg, "media", None), "document", None)
     if not doc or not getattr(doc, "file_reference", None):
         log.warning("file_reference 缺失或非文档类型，使用 download_media 兜底")
-        await tele_client.download_media(msg, file=save_path)  # ✅ 用 client 方法
+        await tele_client.download_media(
+            msg,
+            file=save_path,
+            progress_callback=make_dl_progress_logger(os.path.basename(save_path))
+        )  # ✅ 用 client 方法
         return
 
     if not try_resume:
         log.info("⏬ 禁用续传，直接 download_media")
-        await tele_client.download_media(msg, file=save_path)
+        await tele_client.download_media(
+            msg,
+            file=save_path,
+            progress_callback=make_dl_progress_logger(os.path.basename(save_path))
+        )
         return
 
     try:
@@ -162,7 +209,11 @@ async def safe_download(msg, save_path: str, try_resume: bool = True) -> None:
     except FileMigrateError as e:
         # ✅ 不再 _switch_dc；直接走 Telethon 内建下载（会自动处理 DC）
         log.info("🌐 DC 迁移提示：%s，改用 download_media 兜底", e)
-        await tele_client.download_media(msg, file=save_path)
+        await tele_client.download_media(
+            msg,
+            file=save_path,
+            progress_callback=make_dl_progress_logger(os.path.basename(save_path))
+        )
         return
     except AuthKeyUnregisteredError as e:
         # ✅ 尝试重连后直接走 download_media
@@ -172,11 +223,19 @@ async def safe_download(msg, save_path: str, try_resume: bool = True) -> None:
         except Exception:
             pass
         await start_telethon()
-        await tele_client.download_media(msg, file=save_path)
+        await tele_client.download_media(
+            msg,
+            file=save_path,
+            progress_callback=make_dl_progress_logger(os.path.basename(save_path))
+        )
         return
     except Exception as e:
         log.warning("续传失败，fallback download_media：%s", e)
-        await tele_client.download_media(msg, file=save_path)
+        await tele_client.download_media(
+            msg,
+            file=save_path,
+            progress_callback=make_dl_progress_logger(os.path.basename(save_path))
+        )
         return
 
 
@@ -749,7 +808,7 @@ async def main() -> None:
     BOT_NAME = me.username
     BOT_ID = me.id
     log.info("🤖 Logged in as @%s (BOT_ID=%s, API_ID=%s)", BOT_NAME, BOT_ID, API_ID)
-
+    
     await start_telethon()
 
     # 同时跑：轮询（收视频建任务）+ 处理一笔 pending 任务

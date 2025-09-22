@@ -817,7 +817,7 @@ class HeroGridVideo:
         elapsed = time.time() - start_ts
         pct = 100.0 * i / total if total else 100.0
         eta = self._fmt_eta(elapsed, i, total)
-        print(f"{prefix}: {i}/{total} ({pct:5.1f}%)  ETA {eta}", flush=True)
+        print(f"\r{prefix}: {i}/{total} ({pct:5.1f}%)  ETA {eta}", end="", flush=True)
 
     @staticmethod
     def _fmt_eta(elapsed, done, total):
