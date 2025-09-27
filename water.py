@@ -219,7 +219,7 @@ def add_watermark_with_audio_check(
 
 # ===== 示例：随机闪现模式 =====
 if __name__ == "__main__":
-    file_name = "AnimateDiffTEST2_00078.mp4"
+    file_name = "AnimateDiff_00186.mp4"
     add_watermark_with_audio_check(
         f"./video/{file_name}",
         f"./watermark/w_{file_name}",
