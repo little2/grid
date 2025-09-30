@@ -7,8 +7,8 @@ hg = HeroGridVideo(font_path="fonts/Roboto_Condensed-Regular.ttf",
 
 
 meta = hg.generate(
-    video_path="video/VID20141219215225.mkv",
-    preview_basename="previews/376079",
+    video_path="video/金色背景男孩们004.mp4",
+    preview_basename="previews/37498",
     # manual_times=["07:13"],
     # sample_count=180,
     # num_aux=12,
