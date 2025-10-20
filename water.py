@@ -11,7 +11,7 @@ def add_watermark_with_audio_check(
     input_path: str,
     output_path: str,
     text: str = (
-        "本作品由 AI 合成，仅限本课程学习使用。\n"
+        "夜爱君作品由 AI 合成，仅限本课程学习使用。\n"
         "擅自公开传播者将承担全部法律责任并被依法追究。"
     ),
     font_path: str = "fonts/Roboto_Condensed-Regular.ttf",  # 可传中文字体，如 fonts/msyh.ttc
@@ -219,7 +219,7 @@ def add_watermark_with_audio_check(
 
 # ===== 示例：随机闪现模式 =====
 if __name__ == "__main__":
-    file_name = "AnimateDiff_00186.mp4"
+    file_name = "doc_2025-10-20_21-39-39.mp4"
     add_watermark_with_audio_check(
         f"./video/{file_name}",
         f"./watermark/w_{file_name}",
