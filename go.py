@@ -7,8 +7,8 @@ hg = HeroGridVideo(font_path="fonts/Roboto_Condensed-Regular.ttf",
 
 
 meta = hg.generate(
-    video_path="video/video_20251001_002909_edit.mp4",
-    preview_basename="previews/399527",
+    video_path="video/宇宙棒哥哥系列 三个正太弟弟激啪.mp4",
+    preview_basename="previews/71121",
     # manual_times=["07:13"],
     # sample_count=180,
     # num_aux=12,
