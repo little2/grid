@@ -219,12 +219,12 @@ def add_watermark_with_audio_check(
 
 # ===== 示例：随机闪现模式 =====
 if __name__ == "__main__":
-    file_name = "doc_2025-10-20_21-39-39.mp4"
+    file_name = "11月6日(1).mp4"
     add_watermark_with_audio_check(
         f"./video/{file_name}",
         f"./watermark/w_{file_name}",
         font_path="fonts/msyh.ttc",
-        font_size=11,
+        font_size=36,
         safe_margin=10,
         # 开启随机闪现：每 2.5 秒出现一次，每次 1.2 秒
         flash_interval=0,
