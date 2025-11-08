@@ -118,14 +118,20 @@ class AlbumPreviewGenerator:
         col, row = N_max, max(0, N_max - 2)
         return N_max, col, row
 
-    def max_grid_from_total_files(self, total_files: int) -> Tuple[int, int, int, int]:
+    def max_grid_from_total_files(self, num_images: int, num_videos: int) -> Tuple[int, int, int, int]:
         """
-        若你的“最大图格值”定义为 ⌊总候选数/2⌋（候选数=图片+视频帧）：
+        最大图格值定义：
+        ⌊图片数量/3 + 视频数量⌋
         返回 (M, N_max, col, row)
         """
-        M = total_files // 2
+        # ✅ 新算法
+        M = int(num_images / 3 + num_videos)
+        if M < 1:
+            return (0, 0, 0, 0)
+
         N_max, col, row = self.max_grid_from_limit(M)
         return M, N_max, col, row
+
 
 
     def _read_image_bgr(self, p: Path) -> Optional[np.ndarray]:
@@ -182,7 +188,7 @@ class AlbumPreviewGenerator:
 
         cands, num_img, num_vid, num_other = self._load_candidates(folder)
         # 网格依据“候选数=图片+视频帧”
-        M, N_max, col, row = self.max_grid_from_total_files(num_img + num_vid)
+        M, N_max, col, row = self.max_grid_from_total_files(num_img , num_vid)
         hero, aux, info = self._select_items(cands, col, row)
 
         # 渲染 + 动态水印（改为各类型文件数量）

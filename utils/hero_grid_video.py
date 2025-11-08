@@ -11,6 +11,8 @@ import imagehash
 from insightface.app import FaceAnalysis
 from datetime import datetime
 
+import sys  # ✅ 新增
+
 
 class HeroGridVideo:
     """
@@ -54,20 +56,40 @@ class HeroGridVideo:
     def generate(
         self,
         video_path: str,
-        preview_basename: str,
+        preview_basename: str = None,
         sample_count: Optional[int] = None,          # 允许外部覆盖；不传则按时长自动
         num_aux: Optional[int] = None,               # 允许外部覆盖；不传则按时长自动
         manual_times: Optional[List[str | float | int]] = None,
+        content_id: Optional[int] = None,            # ✅ 新增参数
     ) -> Dict[str, Any]:
         """
         生成网格图并返回元数据（输出路径、主图时间、辅助帧时间等）
         """
         ts_prefix = ''
+
+        # ✅ 改：输出位置改为视频所在目录下的 preview 子目录
+        video_path_obj = Path(video_path)
+        video_stem = video_path_obj.stem
+        video_dir = video_path_obj.parent
+        preview_dir = video_dir / "preview"
+        preview_dir.mkdir(parents=True, exist_ok=True)
+
+        # ✅ 拼接输出路径（大拼图）
+        out_dir = preview_dir
+        out_path = str(out_dir / f"{video_stem}.jpg")
+
+        # ✅ 若传入 content_id，则浮水印用 content_id，否则用视频文件名
+        watermark_text = str(content_id) if content_id else video_stem
+
         # ts_prefix = datetime.now().strftime("%Y%m%d%H%M%S_")
-        out_dir = Path(preview_basename).parent
-        base_name = Path(preview_basename).name
-        out_dir.mkdir(parents=True, exist_ok=True)
-        out_path = str(out_dir / f"{ts_prefix}{base_name}.jpg")
+        # out_dir = Path(preview_basename).parent
+        # base_name = Path(preview_basename).name
+        # # out_dir.mkdir(parents=True, exist_ok=True)
+        # # out_path = str(out_dir / f"{ts_prefix}{base_name}.jpg")
+
+        # video_stem = Path(video_path).stem           # 🔹从视频名取主干名
+        # out_dir.mkdir(parents=True, exist_ok=True)
+        # out_path = str(out_dir / f"{video_stem}.jpg")  # 🔹改成以视频名命名
 
         with VideoFileClip(video_path, audio=False) as clip:
             duration = max(float(clip.duration or 0.01), 0.01)
@@ -186,6 +208,29 @@ class HeroGridVideo:
             else:
                 self._stage("未检测到一致黑边（可能是灰边/共识不足/厚度差异大），保持原图比例。")
 
+
+            # ======== 逐帧单独保存（主图 + 辅助帧） ========
+            video_stem = Path(video_path).stem
+            safe_stem = self._sanitize_filename(video_stem)
+            single_dir = video_dir / f"stills"
+            single_dir.mkdir(parents=True, exist_ok=True)
+
+            # 保存主图
+            hero_time_sec = float(hero_meta.get("time", 0.0))
+            hero_time_str = self._format_zh_time(hero_time_sec)
+            hero_text = f"▶️ {hero_time_str}"
+            hero_img_wm = self._add_watermark(hero_img.copy(), hero_text)
+            hero_out = single_dir / f"{hero_text}.jpg"
+            hero_img_wm.save(hero_out, quality=90, optimize=True)
+
+            # 保存辅助帧
+            for t, img in aux_frames:
+                ts_str = self._format_zh_time(float(t))
+                aux_text = f"{safe_stem}_{ts_str}"
+                aux_img_wm = self._add_watermark(img.copy(), aux_text)
+                aux_out = single_dir / f"{aux_text}.jpg"
+                aux_img_wm.save(aux_out, quality=90, optimize=True)
+
         # ======== 排版输出 ========
         if aux_frames:
             base_w, base_h = aux_frames[0][1].width, aux_frames[0][1].height
@@ -213,18 +258,17 @@ class HeroGridVideo:
         # 水印文字
         self._stage("拼接网格与水印 …")
         draw = ImageDraw.Draw(grid)
-        text = base_name[8:] if base_name.startswith("preview_") else base_name
-        font = self._safe_load_font(self.font_path, size=max(14, int(cell_h * 0.20)))
-        bbox = draw.textbbox((0, 0), text, font=font)
-        text_w = bbox[2] - bbox[0]
-        text_h = bbox[3] - bbox[1]
+        font = self._load_msyh_font(size=max(14, int(cell_h * 0.20)))
+        bbox = draw.textbbox((0, 0), watermark_text, font=font)
+        text_w, text_h = bbox[2] - bbox[0], bbox[3] - bbox[1]
         margin = 64
-        x = int(grid.width  - text_w - margin)
-        y = int(grid.height - text_h - margin)
-        self._draw_text_with_outline(draw, (x, y), text, font)
+        x = grid.width - text_w - margin
+        y = grid.height - text_h - margin
+        self._draw_text_with_outline(draw, (x, y), watermark_text, font)
 
         grid.save(out_path, quality=90, optimize=True)
         self._stage(f"已保存：{out_path}")
+
 
         return {
             "output_path": out_path,
@@ -802,6 +846,46 @@ class HeroGridVideo:
             draw.text((x+dx, y+dy), text, font=font, fill=(0, 0, 0, 200))
         draw.text((x, y), text, font=font, fill=fill)
 
+    
+    def _add_watermark(self, img: Image.Image, text: str) -> Image.Image:
+        """
+        在图像底部中央添加浮水印文字。
+        自动根据图片宽度调整字体大小，确保文字完整呈现且不过小。
+        """
+        draw = ImageDraw.Draw(img)
+
+        # 初始字号（随图像高度定一个上限）
+        base_size = max(14, int(img.height * 0.08))
+        font = self._load_msyh_font(size=base_size)
+
+        # 计算目标最大宽度（图宽的 90%）
+        max_text_width = int(img.width * 0.9)
+        bbox = draw.textbbox((0, 0), text, font=font)
+        text_w = bbox[2] - bbox[0]
+
+        # 若太宽则逐步减小字号直到合适
+        while text_w > max_text_width and base_size > 10:
+            base_size -= 2
+            font = self._load_msyh_font(size=base_size)
+            bbox = draw.textbbox((0, 0), text, font=font)
+            text_w = bbox[2] - bbox[0]
+
+        # 若太窄可略微放大一点，提升可读性
+        while text_w < max_text_width * 0.6 and base_size < int(img.height * 0.12):
+            base_size += 2
+            font = self._load_msyh_font(size=base_size)
+            bbox = draw.textbbox((0, 0), text, font=font)
+            text_w = bbox[2] - bbox[0]
+
+        text_h = bbox[3] - bbox[1]
+        x = (img.width - text_w) // 2
+        y = img.height - text_h - int(img.height * 0.04)
+
+        self._draw_text_with_outline(draw, (x, y), text, font)
+        return img
+
+
+
     # =========================
     # 控制台输出
     # =========================
@@ -827,6 +911,60 @@ class HeroGridVideo:
         remain = rate * (total - done)
         m, s = divmod(int(remain), 60)
         return f"{m:02d}:{s:02d}"
+
+    @staticmethod
+    def _format_zh_time(seconds: float) -> str:
+        """把秒数格式化为中文：mm分ss秒 或 hh时mm分ss秒。"""
+        total = int(round(max(0, seconds)))
+        h, rem = divmod(total, 3600)
+        m, s = divmod(rem, 60)
+        if h > 0:
+            return f"{h:02d}:{m:02d}:{s:02d}"
+        return f"{m:02d}:{s:02d}"
+
+    @staticmethod
+    def _sanitize_filename(name: str) -> str:
+        """简单清理为可用文件名（跨平台安全一点）。"""
+        keep = "-_.()（）·＋+&@"
+        return "".join(ch if ch.isalnum() or ch in keep else "_" for ch in name)
+
+
+    
+
+    @staticmethod
+    def _load_msyh_font(size: int) -> ImageFont.FreeTypeFont:
+        """
+        强制使用微软雅黑（msyh.ttc），避免中文乱码。
+        若路径不存在则退回默认字体。
+        """
+        import sys
+        cand = [
+            "fonts/msyh.ttc",
+            "fonts/msyh.ttf",
+        ]
+        # Windows 系统字体路径兜底
+        if os.name == "nt":
+            win_fonts = os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts")
+            cand += [
+                os.path.join(win_fonts, "msyh.ttc"),
+                os.path.join(win_fonts, "msyh.ttf"),
+            ]
+        # macOS/Linux 若你有 fonts 目录
+        cand += [
+            "/usr/share/fonts/truetype/microsoft/msyh.ttc",
+            "/usr/share/fonts/truetype/msyh.ttc",
+            "/Library/Fonts/msyh.ttc",
+        ]
+
+        for fp in cand:
+            if os.path.exists(fp):
+                try:
+                    return ImageFont.truetype(fp, size=size)
+                except Exception:
+                    continue
+        # 兜底
+        return ImageFont.load_default()
+
 
 
 # =========================
