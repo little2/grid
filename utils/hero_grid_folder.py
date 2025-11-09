@@ -125,7 +125,7 @@ class AlbumPreviewGenerator:
         返回 (M, N_max, col, row)
         """
         # ✅ 新算法
-        M = int(num_images / 3 + num_videos)
+        M = int(num_images / 2 + num_videos)
         if M < 1:
             return (0, 0, 0, 0)
 
