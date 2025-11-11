@@ -13,7 +13,7 @@ from utils.hero_grid_folder import AlbumPreviewGenerator
 # res = extractor.extract("video/小峰.zip", password="000", prefer_pwd_key="tpv")
 # folder_url = res.get('out_dir')
 
-folder_url = "/Applications/XAMPP/xamppfiles/htdocs/grid/video/Captain Bathroom S04E07"
-
+# folder_url = "/Applications/XAMPP/xamppfiles/htdocs/grid/video/Captain Bathroom S04E07"
+folder_url = "/Applications/XAMPP/xamppfiles/htdocs/grid/video/Dear brother/stills"
 gen = AlbumPreviewGenerator(tile_size=256, bottom_strip=30)
-info = gen.generate_preview(folder_url, out_path="天.jpg")
+info = gen.generate_preview(folder_url, out_path="Dear brother.jpg")
