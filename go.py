@@ -33,6 +33,6 @@ if __name__ == "__main__":
                    det_size=(640, 640),
                    verbose=True)
 
-    process_videos_in_dir("./video/Dear brother", hg)
+    process_videos_in_dir("./video/409451", hg)
 
 

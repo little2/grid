@@ -14,6 +14,7 @@ from utils.hero_grid_folder import AlbumPreviewGenerator
 # folder_url = res.get('out_dir')
 
 # folder_url = "/Applications/XAMPP/xamppfiles/htdocs/grid/video/Captain Bathroom S04E07"
-folder_url = "/Applications/XAMPP/xamppfiles/htdocs/grid/video/Dear brother/stills"
+folder_url = "/Applications/XAMPP/xamppfiles/htdocs/grid/video/潭哥×未知（1149）"
+
 gen = AlbumPreviewGenerator(tile_size=256, bottom_strip=30)
-info = gen.generate_preview(folder_url, out_path="Dear brother.jpg")
+info = gen.generate_preview(folder_url, out_path="潭哥×未知（1149）.jpg")
